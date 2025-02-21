@@ -92,22 +92,41 @@ class FirebaseSender
     }
 
     /**
-     * Sets the localization key for the notification title.
+     * Sets the localization key for the notification title for all platforms.
      *
      * @param string $key Localization key.
      * @param array|null $args Array of arguments (optional).
      */
     public function setTitleLocKey(string $key, array|null $args = null)
     {
+        $this->setAndroidTitleLocKey($key, $args);
+        $this->setApnsTitleLocKey($key, $args);
+    }
+
+    /**
+     * Sets the localization key for the Android notification title.
+     *
+     * @param string $key Localization key.
+     * @param array|null $args Array of arguments (optional).
+     */
+    public function setAndroidTitleLocKey(string $key, array|null $args = null)
+    {
         $this->android['notification']['title_loc_key'] = $key;
+        if ($args === null) return;
+        $this->android['notification']['title_loc_args'] = Utils::toStrArg($args);
+    }
+
+    /**
+     * Sets the localization key for the APNs notification title.
+     *
+     * @param string $key Localization key.
+     * @param array|null $args Array of arguments (optional).
+     */
+    public function setApnsTitleLocKey(string $key, array|null $args = null)
+    {
         $this->apns['payload']['aps']['alert']['title-loc-key'] = $key;
-        if ($args != null) {
-            foreach ($args as $value) {
-                $str = strval($value);
-                $this->android['notification']['title_loc_args'][] = $str;
-                $this->apns['payload']['aps']['alert']['title-loc-args'][] = $str;
-            }
-        }
+        if ($args === null) return;
+        $this->apns['payload']['aps']['alert']['title-loc-args'] = Utils::toStrArg($args);
     }
 
     /**
@@ -121,22 +140,41 @@ class FirebaseSender
     }
 
     /**
-     * Sets the localization key for the notification body.
+     * Sets the localization key for the notification body for all platforms.
      *
      * @param string $key Localization key.
      * @param array|null $args Array of arguments (optional).
      */
     public function setBodyLocKey(string $key, array|null $args = null)
     {
+        $this->setAndroidBodyLocKey($key, $args);
+        $this->setApnsBodyLocKey($key, $args);
+    }
+
+    /**
+     *Sets the localization key for the Android notification body.
+     * 
+     * @param string $key Localization key.
+     * @param array|null $args Array of arguments (optional).
+     */
+    public function setAndroidBodyLocKey(string $key, array|null $args = null)
+    {
         $this->android['notification']['body_loc_key'] = $key;
+        if ($args === null) return;
+        $this->android['notification']['body_loc_args'] = Utils::toStrArg($args);
+    }
+
+    /**
+     *Sets the localization key for the APNs notification body.
+     * 
+     * @param string $key Localization key.
+     * @param array|null $args Array of arguments (optional).
+     */
+    public function setApnsBodyLocKey(string $key, array|null $args = null)
+    {
         $this->apns['payload']['aps']['alert']['loc-key'] = $key;
-        if ($args != null) {
-            foreach ($args as $value) {
-                $str = strval($value);
-                $this->android['notification']['body_loc_args'][] = $str;
-                $this->apns['payload']['aps']['alert']['loc-args'][] = $str;
-            }
-        }
+        if ($args === null) return;
+        $this->apns['payload']['aps']['alert']['loc-args'] = Utils::toStrArg($args);
     }
 
     /**
@@ -167,12 +205,12 @@ class FirebaseSender
      */
     public function send(): bool
     {
-        $response = Http::withHeaders([
-            'Content-Type' => 'application/json; UTF-8',
-            'Authorization' => $this->makeBearerAuthorization(),
-        ])->post("https://fcm.googleapis.com/v1/projects/{$this->serviceAccount['project_id']}/messages:send", [
-            'message' => $this->makeMessages()
-        ]);
+        $response = Http::withToken($this->getAccessToken())
+            ->withHeaders(['Content-Type' => 'application/json; UTF-8',])
+            ->post(
+                "https://fcm.googleapis.com/v1/projects/{$this->serviceAccount['project_id']}/messages:send",
+                ['message' => $this->makeMessages()]
+            );
 
         if (!$response->successful()) return false;
         $data = $response->json();
@@ -182,13 +220,23 @@ class FirebaseSender
         preg_match('/projects\/(.+?)\/messages\/(.*)/', $data['name'], $matches);
 
         $this->responseLog = [
-            'message_id' => isset($matches[2]) ? $matches[2] : null,
-            'project_id' => isset($matches[1]) ? $matches[1] : null,
+            'message_id' => $matches[2] ?? null,
+            'project_id' => $matches[1] ?? null
         ];
 
         $this->databaseLog($this->responseLog['message_id'], $this->responseLog['project_id']);
 
         return true;
+    }
+
+    /**
+     * After successful sending, the notification provides a message ID.
+     *
+     * @return string|null
+     */
+    public function getResponseMessageId(): string|null
+    {
+        return $this->responseLog['message_id'] ?? null;
     }
 
     /**
@@ -215,12 +263,13 @@ class FirebaseSender
      * 
      * @throws Ex\AccessTokenMissingException
      */
-    protected function makeBearerAuthorization(): string
+    protected function getAccessToken(): string
     {
         $credentials = CredentialsLoader::makeCredentials('https://www.googleapis.com/auth/firebase.messaging', $this->serviceAccount);
-        if (!isset($credentials->fetchAuthToken()['access_token'])) throw new Ex\AccessTokenMissingException();
+        $accessToken = $credentials->fetchAuthToken()['access_token'] ?? null;
+        if ($accessToken === null) throw new Ex\AccessTokenMissingException();
 
-        return 'Bearer ' . $credentials->fetchAuthToken()['access_token'];
+        return $accessToken;
     }
 
     /**
@@ -233,14 +282,15 @@ class FirebaseSender
         if ($messageID == null || $projectID == null || $this->databaseLog['enabled'] == false) return;
 
         $message[$this->to['type']] = $this->to['address'];
-        $model = new FirebaseSenderLog();
-        $model->message_id = $messageID;
-        $model->project_id = $projectID;
-        $model->high_priority = $this->isHighPriority;
-        $model->type = $this->to['type'];
-        $model->to = $this->to['address'];
-        $model->value = $this->databaseLog['value'];
-        $model->sent_at = Carbon::now();
-        $model->save();
+        
+        FirebaseSenderLog::create([
+            'message_id' => $messageID,
+            'project_id' => $projectID,
+            'high_priority' => $this->isHighPriority,
+            'type' => $this->to['type'],
+            'to' => $this->to['address'],
+            'value' => $this->databaseLog['value'],
+            'sent_at' => Carbon::now()
+        ]);
     }
 }

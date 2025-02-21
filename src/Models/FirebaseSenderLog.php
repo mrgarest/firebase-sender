@@ -9,8 +9,20 @@ class FirebaseSenderLog extends Model
 {
     use HasFactory;
     public $timestamps = false;
+
+    protected $fillable = [
+        'message_id',
+        'project_id',
+        'high_priority',
+        'type',
+        'to',
+        'value',
+        'sent_at'
+    ];
+
     protected $casts = [
         'high_priority' => 'boolean',
+        'sent_at' => 'datetime'
     ];
 
     /**

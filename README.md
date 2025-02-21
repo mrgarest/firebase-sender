@@ -4,6 +4,13 @@ Laravel library for sending notifications with Firebase Cloud Messaging (FCM).
  
 ❗️ **This library only works with the new FCM HTTP v1 API** ❗️
 
+### Supported platforms
+
+| ✅ | Platform |
+| -- | -------- |
+| ✅ | Apns     |
+| ✅ | Android  |
+
 ## Installation
 
 You can install the package via composer:
