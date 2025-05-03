@@ -23,10 +23,13 @@ class FirebaseSender
      * Constructor of the class that initializes an object for interacting with Firebase Sender.
      *
      * @param string $serviceAccountName Name from the `service_accounts` array located in the `config/firebase-sender.php` file.
+     * 
+     * @throws Ex\ServiceAccountException
      */
     public function __construct(string $serviceAccountName)
     {
         $this->serviceAccount = config('firebase-sender.service_accounts.' . $serviceAccountName);
+        if ($this->serviceAccount === null) throw new Ex\ServiceAccountException();
     }
 
     /**
@@ -202,10 +205,14 @@ class FirebaseSender
      * Sends notifications.
      *
      * @return bool `true` if the push notification was successfully sent, `false` otherwise.
+     * @throws Ex\AccessTokenMissingException
      */
     public function send(): bool
     {
-        $response = Http::withToken($this->getAccessToken())
+        $auth = $this->getAuthToken();
+        if ($auth === null) throw new Ex\AccessTokenMissingException();
+
+        $response = Http::withToken($auth['access_token'])
             ->withHeaders(['Content-Type' => 'application/json; UTF-8',])
             ->post(
                 "https://fcm.googleapis.com/v1/projects/{$this->serviceAccount['project_id']}/messages:send",
@@ -257,33 +264,30 @@ class FirebaseSender
     }
 
     /**
-     * Creating an OAuth2 access token for authorization.
+     * Creates an OAuth2 token for authorization.
      *
-     * @return string
+     * @return array<mixed>|null 
      * 
-     * @throws Ex\AccessTokenMissingException
      */
-    protected function getAccessToken(): string
+    public function getAuthToken(): array|null
     {
         $credentials = CredentialsLoader::makeCredentials('https://www.googleapis.com/auth/firebase.messaging', $this->serviceAccount);
-        $accessToken = $credentials->fetchAuthToken()['access_token'] ?? null;
-        if ($accessToken === null) throw new Ex\AccessTokenMissingException();
+        $auth = $credentials->fetchAuthToken();
+        if (!isset($auth['access_token'])) return null;
 
-        return $accessToken;
+        return $auth;
     }
 
     /**
      * Writes the log to the database.
-     *
-     * @return array
      */
     protected function databaseLog($messageID, $projectID)
     {
         if ($messageID == null || $projectID == null || $this->databaseLog['enabled'] == false) return;
 
         $message[$this->to['type']] = $this->to['address'];
-        
-        FirebaseSenderLog::create([
+
+        FirebaseSenderLog::insert([
             'message_id' => $messageID,
             'project_id' => $projectID,
             'high_priority' => $this->isHighPriority,

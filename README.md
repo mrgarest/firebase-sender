@@ -1,15 +1,15 @@
 # Laravel Firebase Sender
 
 Laravel library for sending notifications with Firebase Cloud Messaging (FCM).
- 
+
 ❗️ **This library only works with the new FCM HTTP v1 API** ❗️
 
 ### Supported platforms
 
-| ✅ | Platform |
-| -- | -------- |
-| ✅ | Apns     |
-| ✅ | Android  |
+| ✅  | Platform |
+| --- | -------- |
+| ✅  | Apns     |
+| ✅  | Android  |
 
 ## Installation
 
@@ -27,9 +27,9 @@ After installing the package, you will need to publish the configuration file `f
 php artisan vendor:publish --tag=firebase-sender-config
 ```
 
-After publishing the configuration file, you need to open it and add the Service account data from the Firebase console. 
+After publishing the configuration file, you need to open it and add the Service account data from the Firebase console.
 
-*If you don't know how to get a Service account, here is a [video from YouTube](https://www.youtube.com/watch?v=aeBiLIw2KnY).*
+_If you don't know how to get a Service account, here is a [video from YouTube](https://www.youtube.com/watch?v=aeBiLIw2KnY)._
 
 ## Usage
 
@@ -73,6 +73,7 @@ If you want to use the log of sent notifications, you will also need to publish 
 ```
 php artisan vendor:publish --tag=firebase-sender-migrations
 ```
+
 ```
 php artisan make:migration
 ```
@@ -105,4 +106,23 @@ You can also check if notifications were sent within a specific time range:
 
 ```php
 $isValue = FirebaseSenderLog::isToByTimeRange(Carbon::now()->subMinutes(30), 'MY_TOPIC');
+```
+
+### Auth Token
+
+If you only need an Auth Token, you can use the following method:
+
+```php
+$firebaseSender = new FirebaseSender('MY_SERVICE_ACCOUNT_NAME');
+$auth = $firebaseSender->getAuthToken();
+```
+
+Example of a successful response:
+
+```php
+[
+  "access_token" => "access_token"
+  "expires_in" => 3599
+  "token_type" => "Bearer"
+]
 ```
