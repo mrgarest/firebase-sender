@@ -13,7 +13,6 @@ class FirebaseSenderLog extends Model
     protected $fillable = [
         'message_id',
         'project_id',
-        'high_priority',
         'type',
         'to',
         'value',
@@ -21,7 +20,6 @@ class FirebaseSenderLog extends Model
     ];
 
     protected $casts = [
-        'high_priority' => 'boolean',
         'sent_at' => 'datetime'
     ];
 

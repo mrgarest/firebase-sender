@@ -2,21 +2,30 @@
 
 namespace MrGarest\FirebaseSender;
 
-use MrGarest\FirebaseSender\Models\FirebaseSenderLog;
 use Google\Auth\CredentialsLoader;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use MrGarest\FirebaseSender\Exceptions as Ex;
+use MrGarest\FirebaseSender\Utils;
+use MrGarest\FirebaseSender\TopicCondition;
+use MrGarest\FirebaseSender\Models\FirebaseSenderLog;
+use MrGarest\FirebaseSender\Push\AndroidPush;
+use MrGarest\FirebaseSender\Push\ApnsPush;
+use MrGarest\FirebaseSender\Push\NotificationPush;
+use MrGarest\FirebaseSender\Push\WebPush;
 
 class FirebaseSender
 {
     private $serviceAccount = null;
     private array $to = ['type' => null, 'address' => null];
-    private $isHighPriority = false;
-    private $android = null;
-    private $apns = null;
-    private $notification = null;
-    private $responseLog = null;
+    private $authToken = null;
+    private ?AndroidPush $android = null;
+    private ?ApnsPush $apns = null;
+    private ?WebPush $webpush = null;
+    private ?NotificationPush $notification = null;
+    private ?array $messageData = null;
+    private ?array $message = null;
+    private $response = null;
     private array $databaseLog = ['enabled' => false, 'value' => null];
 
     /**
@@ -34,22 +43,23 @@ class FirebaseSender
 
     /**
      * Sets a high priority for the notification.
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setHighPriority()
     {
-        $this->isHighPriority = true;
-        $this->android['priority'] = 'high';
-        $this->apns['headers']['apns-priority'] = '10';
+        ($this->android ??= new AndroidPush())->setPriorityHigh(true);
+        ($this->apns ??= new ApnsPush())->setPriority(10);
     }
 
     /**
      * Sets the time to live (TTL) for the notification.
      * 
      * @param int $seconds Time duration, in seconds.
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setTimeToLive(int $seconds)
     {
-        $this->android['ttl'] = $seconds . 's';
+        ($this->android ??= new AndroidPush())->setTimeToLive($seconds);
     }
 
     /**
@@ -57,11 +67,20 @@ class FirebaseSender
      *
      * @param string $token
      *
-     * @throws Ex\SimultaneousUseException
+     * @deprecated Use the new setDeviceToken
      */
     public function setTokenDevices(string $token)
     {
-        if ($this->to['type'] != null) throw new Ex\SimultaneousUseException();
+        $this->setDeviceToken($token);
+    }
+
+    /**
+     * Sets the device token for the recipient.
+     *
+     * @param string $token The device token string.
+     */
+    public function setDeviceToken(string $token)
+    {
         $this->to = [
             'type' => 'token',
             'address' => $token,
@@ -69,29 +88,102 @@ class FirebaseSender
     }
 
     /**
-     * Sets the topic for sending a group notification.
+     * Sets the topic or complex topic condition for the recipient.
      *
-     * @param string $topic
-     *
-     * @throws Ex\SimultaneousUseException
+     * @param TopicCondition|string $topic Either a simple topic string or a complex TopicCondition object.
+     * 
+     * @throws \InvalidArgumentException if less than two topic conditions are defined when using TopicCondition
+     * @throws Ex\MissingTopicConditionOperatorException if the condition operator is missing when using TopicCondition
      */
-    public function setTopic(string $topic)
+    public function setTopic(TopicCondition|string $topic)
     {
-        if ($this->to['type'] != null) throw new Ex\SimultaneousUseException();
-        $this->to = [
-            'type' => 'topic',
-            'address' => $topic,
-        ];
+        if (is_string($topic)) {
+            $this->to = [
+                'type' => 'topic',
+                'address' => $topic,
+            ];
+            return;
+        }
+
+        if ($topic instanceof TopicCondition) {
+            $this->to = [
+                'type' => 'condition',
+                'address' => $topic->toCondition(),
+            ];
+            return;
+        }
+    }
+
+    /**
+     * Set the notification payload data.
+     *
+     * @param NotificationPush|null $notification
+     */
+    public function setNotification(?NotificationPush $notification): void
+    {
+        $this->notification = $notification;
+    }
+
+    /**
+     * Set the notification payload for APNs (Apple Push Notification Service).
+     *
+     * @param ApnsPush|null $apns
+     */
+    public function setApns(?ApnsPush $apns): void
+    {
+        $this->apns = $apns;
+    }
+
+    /**
+     * Set the notification payload for Android.
+     *
+     * @param AndroidPush|null $android
+     */
+    public function setAndroid(?AndroidPush $android): void
+    {
+        $this->android = $android;
+    }
+
+    /**
+     * Set the payload for the web push notification.
+     *
+     * @param WebPush|null $web
+     */
+    public function setWeb(?WebPush $web): void
+    {
+        $this->webpush = $web;
+    }
+
+    /**
+     * Set the custom data payload.
+     *
+     * @param array|null $data
+     */
+    public function setData(?array $data): void
+    {
+        $this->messageData = $data;
+    }
+
+    /**
+     * Set the payload of the custom message
+     * This allows you to specify a custom array of data that will be sent as the message body in the FCM request.
+     *
+     * @param array|null $message 
+     */
+    public function setMessage(?array $message)
+    {
+        $this->message = $message;
     }
 
     /**
      * Sets the title of the notification.
      *
      * @param string $str
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setTitle(string $str)
     {
-        $this->notification['title'] = $str;
+        ($this->notification ??= new NotificationPush())->setTitle($str);
     }
 
     /**
@@ -99,6 +191,7 @@ class FirebaseSender
      *
      * @param string $key Localization key.
      * @param array|null $args Array of arguments (optional).
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setTitleLocKey(string $key, array|null $args = null)
     {
@@ -111,12 +204,14 @@ class FirebaseSender
      *
      * @param string $key Localization key.
      * @param array|null $args Array of arguments (optional).
+     * 
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setAndroidTitleLocKey(string $key, array|null $args = null)
     {
-        $this->android['notification']['title_loc_key'] = $key;
+        ($this->android ??= new AndroidPush())->setTitleLocKey($key);
         if ($args === null) return;
-        $this->android['notification']['title_loc_args'] = Utils::toStrArg($args);
+        $this->android->setTitleLocArgs(Utils::toStrArg($args));
     }
 
     /**
@@ -124,22 +219,24 @@ class FirebaseSender
      *
      * @param string $key Localization key.
      * @param array|null $args Array of arguments (optional).
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setApnsTitleLocKey(string $key, array|null $args = null)
     {
-        $this->apns['payload']['aps']['alert']['title-loc-key'] = $key;
+        ($this->apns ??= new ApnsPush())->setTitleLocKey($key);
         if ($args === null) return;
-        $this->apns['payload']['aps']['alert']['title-loc-args'] = Utils::toStrArg($args);
+        $this->apns->setTitleLocArgs(Utils::toStrArg($args));
     }
 
     /**
      * Sets the body of the notification.
      *
      * @param string $str
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setBody(string $str)
     {
-        $this->notification['body'] = $str;
+        ($this->notification ??= new NotificationPush())->setBody($str);
     }
 
     /**
@@ -147,6 +244,7 @@ class FirebaseSender
      *
      * @param string $key Localization key.
      * @param array|null $args Array of arguments (optional).
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setBodyLocKey(string $key, array|null $args = null)
     {
@@ -159,12 +257,13 @@ class FirebaseSender
      * 
      * @param string $key Localization key.
      * @param array|null $args Array of arguments (optional).
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setAndroidBodyLocKey(string $key, array|null $args = null)
     {
-        $this->android['notification']['body_loc_key'] = $key;
+        ($this->android ??= new AndroidPush())->setBodyLocKey($key);
         if ($args === null) return;
-        $this->android['notification']['body_loc_args'] = Utils::toStrArg($args);
+        $this->android->setBodyLocArgs(Utils::toStrArg($args));
     }
 
     /**
@@ -172,22 +271,25 @@ class FirebaseSender
      * 
      * @param string $key Localization key.
      * @param array|null $args Array of arguments (optional).
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setApnsBodyLocKey(string $key, array|null $args = null)
     {
-        $this->apns['payload']['aps']['alert']['loc-key'] = $key;
+        ($this->apns ??= new ApnsPush())->setBodyLocKey($key);
         if ($args === null) return;
-        $this->apns['payload']['aps']['alert']['loc-args'] = Utils::toStrArg($args);
+        $this->apns->setBodyLocArgs(Utils::toStrArg($args));
     }
 
     /**
      * Sets a link to an image.
      *
      * @param string|null $url
+     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
      */
     public function setImage(string|null $url)
     {
-        $this->notification['image'] = $url;
+        ($this->android ??= new AndroidPush())->setImage($url);
+        ($this->apns ??= new ApnsPush())->setImage($url);
     }
 
     /**
@@ -206,17 +308,21 @@ class FirebaseSender
      *
      * @return bool `true` if the push notification was successfully sent, `false` otherwise.
      * @throws Ex\AccessTokenMissingException
+     * @throws Ex\MessageEmptyException
      */
     public function send(): bool
     {
-        $auth = $this->getAuthToken();
-        if ($auth === null) throw new Ex\AccessTokenMissingException();
+        if ($this->authToken === null) $this->authToken = $this->getAuthToken();
+        if ($this->authToken === null) throw new Ex\AccessTokenMissingException();
 
-        $response = Http::withToken($auth['access_token'])
+        $message = $this->message != null ? $this->message : $this->makeMessage();
+        if ($message === null || empty($message)) throw new Ex\MessageEmptyException();
+
+        $response = Http::withToken($this->authToken['access_token'])
             ->withHeaders(['Content-Type' => 'application/json; UTF-8',])
             ->post(
                 "https://fcm.googleapis.com/v1/projects/{$this->serviceAccount['project_id']}/messages:send",
-                ['message' => $this->makeMessages()]
+                ['message' => $message]
             );
 
         if (!$response->successful()) return false;
@@ -226,12 +332,12 @@ class FirebaseSender
 
         preg_match('/projects\/(.+?)\/messages\/(.*)/', $data['name'], $matches);
 
-        $this->responseLog = [
+        $this->response = [
             'message_id' => $matches[2] ?? null,
             'project_id' => $matches[1] ?? null
         ];
 
-        $this->databaseLog($this->responseLog['message_id'], $this->responseLog['project_id']);
+        $this->databaseLog($this->response['message_id'], $this->response['project_id']);
 
         return true;
     }
@@ -243,24 +349,26 @@ class FirebaseSender
      */
     public function getResponseMessageId(): string|null
     {
-        return $this->responseLog['message_id'] ?? null;
+        return $this->response['message_id'] ?? null;
     }
 
     /**
      * Creating a message body for a notification.
      *
-     * @return array
+     * @return array|null
      */
-    protected function makeMessages(): array
+    protected function makeMessage(): array|null
     {
         $message = [
-            'notification' => $this->notification,
-            'android' => $this->android,
-            'apns' => $this->apns,
+            $this->to['type'] => $this->to['address'],
+            'notification' => $this->notification && ($data = $this->notification->make()) ? $data : null,
+            'android' => $this->android && ($data = $this->android->make()) ? $data : null,
+            'apns' => $this->apns && ($data = $this->apns->make()) ? $data : null,
+            'webpush' => $this->webpush && ($data = $this->webpush->make()) ? $data : null,
+            'data' => $this->messageData,
         ];
-        $message[$this->to['type']] = $this->to['address'];
 
-        return $message;
+        return Utils::nullFilter($message);
     }
 
     /**
@@ -290,7 +398,6 @@ class FirebaseSender
         FirebaseSenderLog::insert([
             'message_id' => $messageID,
             'project_id' => $projectID,
-            'high_priority' => $this->isHighPriority,
             'type' => $this->to['type'],
             'to' => $this->to['address'],
             'value' => $this->databaseLog['value'],

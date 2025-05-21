@@ -23,7 +23,6 @@ return new class extends Migration
             $table->id();
             $table->bigInteger('message_id');
             $table->string('project_id');
-            $table->boolean('high_priority');
             $table->string('type', 50);
             $table->string('to');
             $table->string('value')->nullable()->default(null);
