@@ -15,10 +15,10 @@ use MrGarest\FirebaseSender\TopicCondition;
  * @method static Builder|static topic(TopicCondition|string $topic)
  * @method static Builder|static payload1(string|null $payload)
  * @method static Builder|static payload2(string|null $payload)
- * @method static Builder|static createdBetween(Builder $query, Carbon $start, Carbon $end)
- * @method static Builder|static sentBetween(Builder $query, Carbon $start, Carbon $end)
- * @method static Builder|static scheduledBetween(Builder $query, Carbon $start, Carbon $end)
- * @method static Builder|static failedBetween(Builder $query, Carbon $start, Carbon $end)
+ * @method static Builder|static createdBetween(Carbon $start, Carbon $end)
+ * @method static Builder|static sentBetween(Carbon $start, Carbon $end)
+ * @method static Builder|static scheduledBetween(Carbon $start, Carbon $end)
+ * @method static Builder|static failedBetween(Carbon $start, Carbon $end)
  */
 class FirebaseSenderLog extends Model
 {
