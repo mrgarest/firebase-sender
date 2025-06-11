@@ -422,7 +422,7 @@ class FirebaseSender
         ];
 
         if (!$onlyInsert) {
-            return FirebaseSenderLog::selct('id')->create($query);
+            return FirebaseSenderLog::select('id')->create($query);
         }
 
         FirebaseSenderLog::insert($query);
