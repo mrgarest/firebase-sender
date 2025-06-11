@@ -5,9 +5,11 @@ namespace MrGarest\FirebaseSender;
 use Google\Auth\CredentialsLoader;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
+use MrGarest\FirebaseSender\Target;
 use MrGarest\FirebaseSender\Exceptions as Ex;
 use MrGarest\FirebaseSender\Utils;
 use MrGarest\FirebaseSender\TopicCondition;
+use MrGarest\FirebaseSender\Jobs\FirebaseSenderJob;
 use MrGarest\FirebaseSender\Models\FirebaseSenderLog;
 use MrGarest\FirebaseSender\Push\AndroidPush;
 use MrGarest\FirebaseSender\Push\ApnsPush;
@@ -17,16 +19,16 @@ use MrGarest\FirebaseSender\Push\WebPush;
 class FirebaseSender
 {
     private $serviceAccount = null;
-    private array $to = ['type' => null, 'address' => null];
+    private array $to = ['target' => null, 'address' => null];
+    private array $dbLog = ['enabled' => false, 'payloads' => [null, null]];
     private $authToken = null;
+    private $sendResponse = null;
     private ?AndroidPush $android = null;
     private ?ApnsPush $apns = null;
     private ?WebPush $webpush = null;
     private ?NotificationPush $notification = null;
     private ?array $messageData = null;
     private ?array $message = null;
-    private $response = null;
-    private array $databaseLog = ['enabled' => false, 'value' => null];
 
     /**
      * Constructor of the class that initializes an object for interacting with Firebase Sender.
@@ -82,7 +84,7 @@ class FirebaseSender
     public function setDeviceToken(string $token)
     {
         $this->to = [
-            'type' => 'token',
+            'target' => Target::TOKEN,
             'address' => $token,
         ];
     }
@@ -99,7 +101,7 @@ class FirebaseSender
     {
         if (is_string($topic)) {
             $this->to = [
-                'type' => 'topic',
+                'target' => Target::TOPIC,
                 'address' => $topic,
             ];
             return;
@@ -107,7 +109,7 @@ class FirebaseSender
 
         if ($topic instanceof TopicCondition) {
             $this->to = [
-                'type' => 'condition',
+                'target' => Target::CONDITION,
                 'address' => $topic->toCondition(),
             ];
             return;
@@ -293,14 +295,24 @@ class FirebaseSender
     }
 
     /**
-     * Sets the permission to write the log to the database after sending a notification.
-     * For this method, you need to obtain the migration using `php artisan vendor:publish --tag=firebase-sender-migrations`, and then execute the migration itself with `php artisan migrate`.
-     * 
-     * @param string|null $value The value to be added when writing to the database (optional).
+     * Enables or disables logging of the notification sending event to the database.
+     *
+     * @param bool $enabled Whether to enable logging (default: true).
+     * @param string|array|null $payload Additional payload data to store with the log (optional).
      */
-    public function setDatabaseLog(int|float|string|null $value = null)
+    public function setLog(bool $enabled = true, ?string $payload1 = null, ?string $payload2 = null): void
     {
-        $this->databaseLog = ['enabled' => true, 'value' => strval($value)];
+        $this->dbLog = ['enabled' => $enabled, 'payloads' => [$payload1, $payload2]];
+    }
+
+    /**
+     * Returns the json response data from the last send operation.
+     *
+     * @return mixed The response data received from Firebase after sending a notification.
+     */
+    public function getResponse(): mixed
+    {
+        return $this->sendResponse;
     }
 
     /**
@@ -325,31 +337,94 @@ class FirebaseSender
                 ['message' => $message]
             );
 
-        if (!$response->successful()) return false;
-        $data = $response->json();
+        $this->sendResponse = $response->json();
 
-        if (!isset($data['name'])) return false;
+        if (!$response->successful() || isset($this->sendResponse['error']) || !isset($this->sendResponse['name'])) {
+            $this->writeLog(true, [
+                'failed_at' => Carbon::now(),
+            ]);
+            return false;
+        }
 
-        preg_match('/projects\/(.+?)\/messages\/(.*)/', $data['name'], $matches);
-
-        $this->response = [
-            'message_id' => $matches[2] ?? null,
-            'project_id' => $matches[1] ?? null
-        ];
-
-        $this->databaseLog($this->response['message_id'], $this->response['project_id']);
+        $this->writeLog(true, [
+            'message_id' => $this->getMessageIdFromResponse(),
+            'sent_at' => Carbon::now(),
+        ]);
 
         return true;
     }
 
     /**
-     * After successful sending, the notification provides a message ID.
+     * Extracts and returns the message ID from the Firebase response.
      *
-     * @return string|null
+     * @return string|null The message ID if available, or null if not found in the response.
      */
-    public function getResponseMessageId(): string|null
+    public function getMessageIdFromResponse(): ?string
     {
-        return $this->response['message_id'] ?? null;
+        if (!isset($this->sendResponse['name'])) return null;
+
+        // [1] - project id, [2] - message id
+        preg_match('/projects\/(.+?)\/messages\/(.*)/', $this->sendResponse['name'], $matches);
+
+        return $matches[2] ?? null;
+    }
+
+    /**
+     * Schedules a notification to be sent at a specific time using a queued job.
+     *
+     * @param Carbon|null $scheduledAt The date and time when the notification should be sent. If null, the job will be dispatched immediately.
+     * @throws Ex\MessageEmptyException If the message payload is empty or invalid.
+     */
+    public function sendJob(?Carbon $scheduledAt = null): void
+    {
+        $message = $this->message != null ? $this->message : $this->makeMessage();
+        if ($message === null || empty($message)) throw new Ex\MessageEmptyException();
+
+        $model = $this->writeLog(false, [
+            'scheduled_at' => $scheduledAt
+        ]);
+
+        FirebaseSenderJob::dispatch(
+            $model != null ? $model->id : null,
+            $this->serviceAccount,
+            $message,
+        )->delay($scheduledAt);
+    }
+
+    /**
+     * Writes a log entry to the database about the notification sending event.
+     *
+     * @param bool $onlyInsert If true, only inserts a new record and returns the created model; otherwise, performs a standard insert.
+     * @param array|null $data
+     * @return mixed|null Returns the created model if $onlyInsert is true, otherwise null.
+     */
+    protected function writeLog(bool $onlyInsert, ?array $data)
+    {
+        if ($this->dbLog['enabled'] !== true) return null;
+
+        $now = Carbon::now();
+
+        $query = [
+            'message_id' => $data['message_id'] ?? null,
+            'service_account' => $this->serviceAccount,
+            'target' => $this->to['target'],
+            'to' => $this->to['address'],
+            'payload_1' => $this->dbLog['payloads'][0] ?? null,
+            'payload_2' => $this->dbLog['payloads'][1] ?? null,
+            'sent_at' => $data['sent_at'] ?? null,
+            'scheduled_at' => $data['scheduled_at'] ?? null,
+            'failed_at' => $data['failed_at'] ?? null,
+            'created_at' => $now,
+            'updated_at' => $now
+        ];
+
+        if (!$onlyInsert) {
+            return FirebaseSenderLog::selct('id')->create($query);
+        }
+
+        FirebaseSenderLog::insert($query);
+
+        return null;
     }
 
     /**
@@ -357,10 +432,10 @@ class FirebaseSender
      *
      * @return array|null
      */
-    protected function makeMessage(): array|null
+    protected function makeMessage(): ?array
     {
         $message = [
-            $this->to['type'] => $this->to['address'],
+            $this->to['target'] => $this->to['address'],
             'notification' => $this->notification && ($data = $this->notification->make()) ? $data : null,
             'android' => $this->android && ($data = $this->android->make()) ? $data : null,
             'apns' => $this->apns && ($data = $this->apns->make()) ? $data : null,
@@ -375,33 +450,13 @@ class FirebaseSender
      * Creates an OAuth2 token for authorization.
      *
      * @return array<mixed>|null 
-     * 
      */
-    public function getAuthToken(): array|null
+    public function getAuthToken(): ?array
     {
         $credentials = CredentialsLoader::makeCredentials('https://www.googleapis.com/auth/firebase.messaging', $this->serviceAccount);
         $auth = $credentials->fetchAuthToken();
         if (!isset($auth['access_token'])) return null;
 
         return $auth;
-    }
-
-    /**
-     * Writes the log to the database.
-     */
-    protected function databaseLog($messageID, $projectID)
-    {
-        if ($messageID == null || $projectID == null || $this->databaseLog['enabled'] == false) return;
-
-        $message[$this->to['type']] = $this->to['address'];
-
-        FirebaseSenderLog::insert([
-            'message_id' => $messageID,
-            'project_id' => $projectID,
-            'type' => $this->to['type'],
-            'to' => $this->to['address'],
-            'value' => $this->databaseLog['value'],
-            'sent_at' => Carbon::now()
-        ]);
     }
 }

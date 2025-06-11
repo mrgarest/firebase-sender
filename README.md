@@ -42,7 +42,7 @@ _If you don't know how to get a Service account, here is a [video from YouTube](
 $firebaseSender = new FirebaseSender('MY_SERVICE_ACCOUNT_NAME');
 ```
 
-`MY_SERVICE_ACCOUNT_NAME` - the identifier of your service account registered in the firebase-sender.php configuration
+`MY_SERVICE_ACCOUNT_NAME` - the identifier of your service account registered in the `firebase-sender.php` configuration.
 
 ### Send a notification to a specific device
 
@@ -119,6 +119,12 @@ After configuring the notification, you can send it by calling the `send()` meth
 $firebaseSender->send();
 ```
 
+If you don't want to send the message immediately, but want to schedule it for later, you can use the `sendJob()` method. To use this method, [queues](https://laravel.com/docs/12.x/queues) must be configured in your Laravel project.
+
+```php
+$firebaseSender->sendJob(Carbon::now()->addHours(1));
+```
+
 ### Custom message
 
 With this method, you can specify a custom data structure for the message to be sent through FCM. This can be useful for sending additional information that is not included in the standard notification options.
@@ -176,29 +182,100 @@ php artisan make:migration
 To add notification information to the log, you'll need to use an additional method before sending notifications:
 
 ```php
-$firebaseSender->setDatabaseLog();
+$firebaseSender->setLog(
+    true,
+    'language',
+    'en'
+);
 ```
 
-This method can also take an additional value of type string, which can be used, for example, to check whether a notification was sent with a specific argument to avoid duplicate notifications.
+The setLog method takes three arguments:
+
+- `enabled` - enables or disables logging. If set to `true`, information about the notification will be written to the database log.
+- `payload1` and `payload2` - additional values that will be stored in the log. You can use it to store your own data (for example, a unique identifier or tag) to facilitate identification or filtering of notifications.
+
+### FirebaseSenderLog Query Scopes
+
+#### `messageId()`
+
+Filter logs by the message ID.
 
 ```php
-$firebaseSender->setDatabaseLog('TEST_VALUE');
+$query->messageId(45543643);
 ```
 
-To check if there is an additional value in the log, you can use this method:
+#### `serviceAccount()`
+
+Filter logs by the service account used to send the notification.
 
 ```php
-$isValue = FirebaseSenderLog::isValue('TEST_VALUE', 'MY_TOPIC');
+$query->serviceAccount('MY_SERVICE_ACCOUNT_NAME');
 ```
 
-You can also check the additional value by date range:
+#### `deviceToken()`
+
+Filter logs by the device token (for notifications sent to a specific device).
 
 ```php
-$isValue = FirebaseSenderLog::isValueByTimeRange(Carbon::now()->subMinutes(30), 'TEST_VALUE', 'MY_TOPIC');
+$query->deviceToken('DEVICE_TOKEN');
 ```
 
-You can also check if notifications were sent within a specific time range:
+#### `topic()`
+
+Filter logs by the topic or topic condition (for notifications sent to a topic or condition).
 
 ```php
-$isValue = FirebaseSenderLog::isToByTimeRange(Carbon::now()->subMinutes(30), 'MY_TOPIC');
+$query->topic('TOPIC_NAME');
+```
+
+#### Payload
+
+`payload1()` and `payload2()` filter logs by the first value of the user payload.
+
+```php
+$query->payload1('language');
+```
+
+#### `createdBetween()`
+
+Filter logs created between two dates.
+
+```php
+$query->createdBetween(
+    Carbon::now(),
+    Carbon::now()->subHours(1)
+);
+```
+
+#### `sentBetween()`
+
+Filter logs where the notification was sent between two dates.
+
+```php
+$query->sentBetween(
+    Carbon::now(),
+    Carbon::now()->subHours(1)
+);
+```
+
+#### `scheduledBetween()`
+
+Filter logs where the notification was scheduled between two dates.
+
+```php
+$query->scheduledBetween(
+    Carbon::now(),
+    Carbon::now()->subHours(1)
+);
+```
+
+#### `failedBetween()`
+
+Filter logs where the notification failed between two dates.
+
+```php
+$query->failedBetween(
+    Carbon::now(),
+    Carbon::now()->subHours(1)
+);
 ```

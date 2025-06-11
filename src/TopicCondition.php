@@ -2,6 +2,7 @@
 
 namespace MrGarest\FirebaseSender;
 
+use MrGarest\FirebaseSender\Target;
 use MrGarest\FirebaseSender\Exceptions as Ex;
 
 class TopicCondition
@@ -24,7 +25,7 @@ class TopicCondition
         $condition = "'{$name}' in topics";
 
         $this->parts[] = [
-            'type' => 'condition',
+            'type' => Target::CONDITION,
             'operator' => $this->pendingOperator,
             'value' => $condition,
         ];
@@ -98,7 +99,7 @@ class TopicCondition
         foreach ($this->parts as $index => $part) {
             $prefix = ($index === 0 || is_null($part['operator'])) ? '' : " {$part['operator']} ";
 
-            if ($part['type'] === 'condition') {
+            if ($part['type'] === Target::CONDITION) {
                 $expression .= $prefix . $part['value'];
             } elseif ($part['type'] === 'group') {
                 $expression .= $prefix . '(' . $part['builder']->toCondition() . ')';
@@ -115,7 +116,7 @@ class TopicCondition
         $count = 0;
 
         foreach ($this->parts as $part) {
-            if ($part['type'] === 'condition') {
+            if ($part['type'] === Target::CONDITION) {
                 $count++;
             } elseif ($part['type'] === 'group') {
                 $count += $part['builder']->countConditions();
@@ -137,7 +138,6 @@ class TopicCondition
                 throw new \LogicException("Missing logical operator between conditions or groups at part index {$index}.");
             }
             if ($part['type'] === 'group') {
-                // Recursively validate nested groups
                 $part['builder']->validateOperators();
             }
         }

@@ -71,6 +71,14 @@ The `setApnsTitleLocKey()` and `setApnsBodyLocKey()` methods have been replaced 
 You can learn how to use the `setApns()` method in the [README.md](https://github.com/mrgarest/laravel-firebase-sender/blob/master/README.md#set-notifications-for-apns) file.
 
 
-## databaseLog()
+## Database logs
 
-In order to continue using logging, you need to remove the `high_priority` column from the `firebase_sender_logs` table in your database.
+The logging of notification data has been completely redesigned, and the old logging data model is now completely unsupported.
+
+To use the new logging model, you need to manually delete the `firebase_sender_logs` migration from your database and then run the migration:
+
+```
+php artisan make:migration
+```
+
+Also, the method previously used to write data to the database, `setDatabaseLog()`, is no longer supported. It has been replaced by the new `setLog()` method.
