@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('firebase_sender_logs', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('message_id')->nullable()->default(null);
             $table->string('service_account');
+            $table->string('message_id')->nullable()->default(null);
             $table->string('target', 32);
             $table->string('to');
             $table->string('payload_1')->nullable()->default(null);
