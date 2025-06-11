@@ -75,7 +75,13 @@ You can learn how to use the `setApns()` method in the [README.md](https://githu
 
 The logging of notification data has been completely redesigned, and the old logging data model is now completely unsupported.
 
-To use the new logging model, you need to manually delete the `firebase_sender_logs` migration from your database and then run the migration:
+To use the new registration model, you need to manually delete the `firebase_sender_logs` migration from the database, then publish:
+
+```
+php artisan vendor:publish --tag=firebase-sender-migrations
+```
+
+And run the migration:
 
 ```
 php artisan make:migration

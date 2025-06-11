@@ -18,6 +18,7 @@ use MrGarest\FirebaseSender\Push\WebPush;
 
 class FirebaseSender
 {
+    private $serviceAccountName = null;
     private $serviceAccount = null;
     private array $to = ['target' => null, 'address' => null];
     private array $dbLog = ['enabled' => false, 'payloads' => [null, null]];
@@ -39,6 +40,7 @@ class FirebaseSender
      */
     public function __construct(string $serviceAccountName)
     {
+        $this->serviceAccountName = $serviceAccountName;
         $this->serviceAccount = config('firebase-sender.service_accounts.' . $serviceAccountName);
         if ($this->serviceAccount === null) throw new Ex\ServiceAccountException();
     }
@@ -298,7 +300,8 @@ class FirebaseSender
      * Enables or disables logging of the notification sending event to the database.
      *
      * @param bool $enabled Whether to enable logging (default: true).
-     * @param string|array|null $payload Additional payload data to store with the log (optional).
+     * @param string|array|null $payload1 Additional payload data to store with the log (optional).
+     * @param string|array|null $payload2 Additional payload data to store with the log (optional).
      */
     public function setLog(bool $enabled = true, ?string $payload1 = null, ?string $payload2 = null): void
     {
@@ -386,7 +389,7 @@ class FirebaseSender
 
         FirebaseSenderJob::dispatch(
             $model != null ? $model->id : null,
-            $this->serviceAccount,
+            $this->serviceAccountName,
             $message,
         )->delay($scheduledAt);
     }
@@ -406,7 +409,7 @@ class FirebaseSender
 
         $query = [
             'message_id' => $data['message_id'] ?? null,
-            'service_account' => $this->serviceAccount,
+            'service_account' => $this->serviceAccountName,
             'target' => $this->to['target'],
             'to' => $this->to['address'],
             'payload_1' => $this->dbLog['payloads'][0] ?? null,
