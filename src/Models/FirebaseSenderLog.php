@@ -9,16 +9,17 @@ use MrGarest\FirebaseSender\Target;
 use MrGarest\FirebaseSender\TopicCondition;
 
 /**
- * @method static Builder|static messageId(int|string $id)
- * @method static Builder|static serviceAccount(string $serviceAccount)
- * @method static Builder|static deviceToken(string $token)
- * @method static Builder|static topic(TopicCondition|string $topic)
- * @method static Builder|static payload1(string|null $payload)
- * @method static Builder|static payload2(string|null $payload)
- * @method static Builder|static createdBetween(Carbon $start, Carbon $end)
- * @method static Builder|static sentBetween(Carbon $start, Carbon $end)
- * @method static Builder|static scheduledBetween(Carbon $start, Carbon $end)
- * @method static Builder|static failedBetween(Carbon $start, Carbon $end)
+ * @method static Builder|static messageId(int|string $id) Filter by message ID.
+ * @method static Builder|static serviceAccount(string $serviceAccount) Filter by service account name.
+ * @method static Builder|static deviceToken(string $token) Filter by device token target.
+ * @method static Builder|static topic(TopicCondition|string $topic) Filter by exact topic or topic condition.
+ * @method static Builder|static matchTopic(string $topic, bool $onlyCondition = false) Filter by exact or partial topic match, including within topic conditions.
+ * @method static Builder|static payload1(string|null $payload) Filter by first payload value.
+ * @method static Builder|static payload2(string|null $payload) Filter by second payload value.
+ * @method static Builder|static createdBetween(Carbon $start, Carbon $end) Filter records created between two dates.
+ * @method static Builder|static sentBetween(Carbon $start, Carbon $end) Filter records sent between two dates.
+ * @method static Builder|static scheduledBetween(Carbon $start, Carbon $end) Filter records scheduled between two dates.
+ * @method static Builder|static failedBetween(Carbon $start, Carbon $end) Filter records failed between two dates.
  */
 class FirebaseSenderLog extends Model
 {
@@ -44,21 +45,53 @@ class FirebaseSenderLog extends Model
         'updated_at' => 'datetime',
     ];
 
+    /**
+     * Filter by message ID.
+     *
+     * @param Builder $query
+     * @param int|string $id
+     * @return Builder
+     */
     public function scopeMessageId(Builder $query, int|string $id): Builder
     {
         return $query->where('message_id', $id);
     }
 
+    /**
+     * Filter by service account name.
+     *
+     * @param Builder $query
+     * @param string $serviceAccount
+     * @return Builder
+     */
     public function scopeServiceAccount(Builder $query, string $serviceAccount): Builder
     {
         return $query->where('service_account', $serviceAccount);
     }
 
+    /**
+     * Filter by device token target.
+     *
+     * @param Builder $query
+     * @param string $token
+     * @return Builder
+     */
     public function scopeDeviceToken(Builder $query, string $token): Builder
     {
         return $query->where('target', Target::TOKEN)->where('to', $token);
     }
 
+    /**
+     * Filter by exact topic or topic condition.
+     *
+     * Finds records where the topic or condition exactly matches the given value.
+     *
+     * @param Builder $query
+     * @param TopicCondition|string $topic
+     * @return Builder
+     *
+     * @throws \InvalidArgumentException
+     */
     public function scopeTopic(Builder $query, TopicCondition|string $topic): Builder
     {
         $target = $to = null;
@@ -80,31 +113,104 @@ class FirebaseSenderLog extends Model
         return $query->where('target', $target)->where('to', $to);
     }
 
+    /**
+     * Filter by exact or partial topic match, including within topic conditions.
+     *
+     * Finds records where the topic exactly matches or is included within topic conditions.
+     *
+     * @param Builder $query
+     * @param string $topic
+     * @param bool $onlyCondition  Whether to filter only condition targets.
+     * @return Builder
+     */
+    public function scopeMatchTopic(Builder $query, string $topic, bool $onlyCondition = false): Builder
+    {
+        if ($onlyCondition) {
+            return $query->where('target', Target::CONDITION)
+                ->where('to', 'like', '%"' . $topic . '" in topics%');
+        }
+
+        return $query->where(function ($q) use ($topic) {
+            $q->where('target', Target::TOPIC)
+                ->where('to', $topic)
+                ->orWhere(function ($q) use ($topic) {
+                    $q->where('target', Target::CONDITION)
+                        ->where('to', 'like', '%"' . $topic . '" in topics%');
+                });
+        });
+    }
+
+    /**
+     * Filter by first payload value.
+     *
+     * @param Builder $query
+     * @param string|null $payload
+     * @return Builder
+     */
     public function scopePayload1(Builder $query, ?string $payload): Builder
     {
         return $query->where('payload_1', $payload);
     }
 
+    /**
+     * Filter by second payload value.
+     *
+     * @param Builder $query
+     * @param string|null $payload
+     * @return Builder
+     */
     public function scopePayload2(Builder $query, ?string $payload): Builder
     {
         return $query->where('payload_2', $payload);
     }
 
+    /**
+     * Filter records created between two dates.
+     *
+     * @param Builder $query
+     * @param Carbon $start
+     * @param Carbon $end
+     * @return Builder
+     */
     public function scopeCreatedBetween(Builder $query, Carbon $start, Carbon $end): Builder
     {
         return $query->whereBetween('created_at', [$start, $end]);
     }
 
+    /**
+     * Filter records sent between two dates.
+     *
+     * @param Builder $query
+     * @param Carbon $start
+     * @param Carbon $end
+     * @return Builder
+     */
     public function scopeSentBetween(Builder $query, Carbon $start, Carbon $end): Builder
     {
         return $query->whereBetween('sent_at', [$start, $end]);
     }
 
+    /**
+     * Filter records scheduled between two dates.
+     *
+     * @param Builder $query
+     * @param Carbon $start
+     * @param Carbon $end
+     * @return Builder
+     */
     public function scopeScheduledBetween(Builder $query, Carbon $start, Carbon $end): Builder
     {
         return $query->whereBetween('scheduled_at', [$start, $end]);
     }
 
+    /**
+     * Filter records failed between two dates.
+     *
+     * @param Builder $query
+     * @param Carbon $start
+     * @param Carbon $end
+     * @return Builder
+     */
     public function scopeFailedBetween(Builder $query, Carbon $start, Carbon $end): Builder
     {
         return $query->whereBetween('failed_at', [$start, $end]);

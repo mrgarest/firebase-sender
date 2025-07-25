@@ -220,12 +220,27 @@ Filter logs by the device token (for notifications sent to a specific device).
 $query->deviceToken('DEVICE_TOKEN');
 ```
 
-#### `topic()`
+#### Topic
 
-Filter logs by the topic or topic condition (for notifications sent to a topic or condition).
+Filters records where the topic exactly matches the value passed.
 
 ```php
 $query->topic('TOPIC_NAME');
+```
+
+If you need to search for a topic that may appear as part of a condition, use the `matchTopic()` method. It allows matching both exact topics and topics used in conditions.
+
+```php
+$query->matchTopic('TOPIC_NAME');
+```
+
+By default, `matchTopic()` checks for both exact and conditional matches. If you want to search only within conditions, pass true as the second argument:
+
+```php
+$query->matchTopic(
+    'TOPIC_NAME',
+    true
+);
 ```
 
 #### Payload
