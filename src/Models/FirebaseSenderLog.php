@@ -127,7 +127,7 @@ class FirebaseSenderLog extends Model
     {
         if ($onlyCondition) {
             return $query->where('target', Target::CONDITION)
-                ->where('to', 'like', '%"' . $topic . '" in topics%');
+                ->where('to', 'like', "%'{$topic}' in topics%");
         }
 
         return $query->where(function ($q) use ($topic) {
@@ -135,7 +135,7 @@ class FirebaseSenderLog extends Model
                 ->where('to', $topic)
                 ->orWhere(function ($q) use ($topic) {
                     $q->where('target', Target::CONDITION)
-                        ->where('to', 'like', '%"' . $topic . '" in topics%');
+                        ->where('to', 'like', "%'{$topic}' in topics%");
                 });
         });
     }
