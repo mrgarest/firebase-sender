@@ -2,11 +2,11 @@
 
 namespace MrGarest\FirebaseSender\Jobs;
 
-use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use MrGarest\FirebaseSender\FirebaseSender;
 use MrGarest\FirebaseSender\Models\FirebaseSenderLog;
+use MrGarest\FirebaseSender\Utils;
 
 class FirebaseSenderJob implements ShouldQueue
 {
@@ -16,12 +16,10 @@ class FirebaseSenderJob implements ShouldQueue
      * Create a new job instance.
      */
     public function __construct(
-        public int|null $id,
         public string $serviceAccount,
-        public array $message,
-    ) {
-        
-    }
+        public array $messages,
+        public array|null $ulids,
+    ) {}
 
     /**
      * Execute the job.
@@ -29,25 +27,28 @@ class FirebaseSenderJob implements ShouldQueue
     public function handle(): void
     {
         $firebaseSender = new FirebaseSender($this->serviceAccount);
-        $firebaseSender->setLog(false);
-        $firebaseSender->setMessage($this->message);
-        $isSend = $firebaseSender->send();
+        $firebaseSender->logEnabled(false);
+        $firebaseSender->setMessages($this->messages);
+        $results = $firebaseSender->send();
 
-        $now = Carbon::now();
-        optional(FirebaseSenderLog::find($this->id))->update([
-            'message_id' => $firebaseSender->getMessageIdFromResponse(),
-            'sent_at' => $isSend ? $now : null,
-            'failed_at' => $isSend ? null : $now
-        ]);
-    }
+        if (empty($this->ulids)) return;
 
-    /**
-     * Failed job.
-     */
-    public function failed(\Exception $exception)
-    {
-        optional(FirebaseSenderLog::find($this->id))->update([
-            'failed_at' => Carbon::now()
-        ]);
+        $updateData = [];
+        foreach ($results->messages as $index => $message) {
+            $ulid = $this->ulids[$index] ?? null;
+            if (!$ulid) continue;
+
+            $updateData[] = [
+                'ulid' => $ulid,
+                'message_id' => $message->success ? $message->messageId : null,
+                'sent_at' => $message->success ? $message->datetime : null,
+                'failed_at' => !$message->success ? $message->datetime : null,
+                'exception' => Utils::messageToException($message)
+            ];
+        }
+
+        if (!empty($updateData)) {
+            collect($updateData)->chunk(500)->each(fn($chunk) => FirebaseSenderLog::upsert($chunk->toArray(), ['ulid'], ['message_id', 'sent_at', 'failed_at']));
+        }
     }
 }

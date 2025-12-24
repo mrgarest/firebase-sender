@@ -7,8 +7,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use MrGarest\FirebaseSender\Target;
 use MrGarest\FirebaseSender\TopicCondition;
+use Illuminate\Support\Str;
 
 /**
+ * @method static Builder|static ulid(int|string $id) Filter by ulid.
  * @method static Builder|static messageId(int|string $id) Filter by message ID.
  * @method static Builder|static serviceAccount(string $serviceAccount) Filter by service account name.
  * @method static Builder|static deviceToken(string $token) Filter by device token target.
@@ -24,12 +26,14 @@ use MrGarest\FirebaseSender\TopicCondition;
 class FirebaseSenderLog extends Model
 {
     protected $fillable = [
-        'message_id',
+        'ulid',
         'service_account',
+        'message_id',
         'target',
         'to',
         'payload_1',
         'payload_2',
+        'exception',
         'sent_at',
         'failed_at',
         'scheduled_at',
@@ -38,12 +42,41 @@ class FirebaseSenderLog extends Model
     ];
 
     protected $casts = [
+        'ulid' => 'string',
+        'service_account' => 'string',
+        'message_id' => 'string',
+        'target' => 'string',
+        'to' => 'string',
+        'payload_1' => 'string',
+        'payload_2' => 'string',
+        'exception' => 'string',
         'sent_at' => 'datetime',
         'failed_at' => 'datetime',
         'scheduled_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    protected static function booted()
+    {
+        static::creating(function ($model) {
+            if (empty($model->ulid)) {
+                $model->ulid = Str::ulid();
+            }
+        });
+    }
+
+    /**
+     * Filter by ulid.
+     *
+     * @param Builder $query
+     * @param string $ulid
+     * @return Builder
+     */
+    public function scopeUlid(Builder $query, string $ulid): Builder
+    {
+        return $query->where('ulid', $ulid);
+    }
 
     /**
      * Filter by message ID.

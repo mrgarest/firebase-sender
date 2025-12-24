@@ -4,6 +4,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Laravel Firebase Sender
+    |--------------------------------------------------------------------------
+    */
+
+    'cache' => [
+        'googleAccessToken' => true // Allows caching Google access tokens for sending notification requests. It is recommended to enable caching to reduce the number of unnecessary requests for obtaining a token.
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Firebase Service Account
     |--------------------------------------------------------------------------
     */

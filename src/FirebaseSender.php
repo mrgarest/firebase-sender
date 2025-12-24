@@ -2,11 +2,19 @@
 
 namespace MrGarest\FirebaseSender;
 
-use Google\Auth\CredentialsLoader;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+use MrGarest\FirebaseSender\DTO\GoogleAccessToken;
+use MrGarest\FirebaseSender\GoogleService;
+use MrGarest\FirebaseSender\DTO\MessageError;
+use MrGarest\FirebaseSender\DTO\MessageResult;
+use MrGarest\FirebaseSender\DTO\SendReport;
+use MrGarest\FirebaseSender\Exceptions\AccessTokenMissingException;
+use MrGarest\FirebaseSender\Exceptions\MessageEmptyException;
+use MrGarest\FirebaseSender\Exceptions\MissingMessageContentException;
 use MrGarest\FirebaseSender\Target;
-use MrGarest\FirebaseSender\Exceptions as Ex;
+use MrGarest\FirebaseSender\Exceptions\MissingMessageRecipientException;
+use MrGarest\FirebaseSender\Exceptions\ServiceAccountException;
 use MrGarest\FirebaseSender\Utils;
 use MrGarest\FirebaseSender\TopicCondition;
 use MrGarest\FirebaseSender\Jobs\FirebaseSenderJob;
@@ -20,16 +28,27 @@ class FirebaseSender
 {
     private $serviceAccountName = null;
     private $serviceAccount = null;
-    private array $to = ['target' => null, 'address' => null];
-    private array $dbLog = ['enabled' => false, 'payloads' => [null, null]];
-    private $authToken = null;
-    private $sendResponse = null;
-    private ?AndroidPush $android = null;
-    private ?ApnsPush $apns = null;
-    private ?WebPush $webpush = null;
-    private ?NotificationPush $notification = null;
-    private ?array $messageData = null;
-    private ?array $message = null;
+    private array $to = [['target' => null, 'address' => null]];
+    private bool $logEnabled = false;
+    private ?array $payloads = null;
+    private ?GoogleAccessToken $authToken = null;
+    private int $groupIndex = 0;
+
+    /** @var AndroidPush[] */
+    private array $android = [];
+
+    /** @var ApnsPush[] */
+    private array $apns = [];
+
+    /** @var WebPush[] */
+    private array $webpush = [];
+
+    /** @var NotificationPush[] */
+    private array $notification = [];
+
+    private ?array $messageData = [];
+
+    private ?array $messages = null;
 
     /**
      * Constructor of the class that initializes an object for interacting with Firebase Sender.
@@ -42,40 +61,50 @@ class FirebaseSender
     {
         $this->serviceAccountName = $serviceAccountName;
         $this->serviceAccount = config('firebase-sender.service_accounts.' . $serviceAccountName);
-        if ($this->serviceAccount === null) throw new Ex\ServiceAccountException();
+        if ($this->serviceAccount === null) throw new ServiceAccountException();
     }
 
     /**
-     * Sets a high priority for the notification.
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
+     * Clear all set notification data.
      */
-    public function setHighPriority()
+    public function clear(): void
     {
-        ($this->android ??= new AndroidPush())->setPriorityHigh(true);
-        ($this->apns ??= new ApnsPush())->setPriority(10);
+        $this->to = [['target' => null, 'address' => null]];
+        $this->groupIndex = 0;
+        $this->android = [];
+        $this->apns = [];
+        $this->webpush = [];
+        $this->notification = [];
+        $this->messageData = [];
+        $this->messages = [];
+        $this->payloads = null;
     }
 
     /**
-     * Sets the time to live (TTL) for the notification.
+     * Sets the index for a group of messages.
+     *
+     * @param string $index
+     */
+    public function setGroup(int $index): void
+    {
+        $this->groupIndex = $index;
+    }
+
+    /**
+     * Returns the count of groups.
      * 
-     * @param int $seconds Time duration, in seconds.
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
+     * @return int
      */
-    public function setTimeToLive(int $seconds)
+    public function getGroupCount(): int
     {
-        ($this->android ??= new AndroidPush())->setTimeToLive($seconds);
-    }
-
-    /**
-     * Sets the token of a specific device to which the notification will be sent.
-     *
-     * @param string $token
-     *
-     * @deprecated Use the new setDeviceToken
-     */
-    public function setTokenDevices(string $token)
-    {
-        $this->setDeviceToken($token);
+        return max(
+            count($this->notification ?? []),
+            count($this->android ?? []),
+            count($this->apns ?? []),
+            count($this->webpush ?? []),
+            count($this->messageData ?? []),
+            0
+        );
     }
 
     /**
@@ -83,9 +112,9 @@ class FirebaseSender
      *
      * @param string $token The device token string.
      */
-    public function setDeviceToken(string $token)
+    public function setDeviceToken(string $token): void
     {
-        $this->to = [
+        $this->to[$this->groupIndex] = [
             'target' => Target::TOKEN,
             'address' => $token,
         ];
@@ -99,10 +128,10 @@ class FirebaseSender
      * @throws \InvalidArgumentException if less than two topic conditions are defined when using TopicCondition
      * @throws Ex\MissingTopicConditionOperatorException if the condition operator is missing when using TopicCondition
      */
-    public function setTopic(TopicCondition|string $topic)
+    public function setTopic(TopicCondition|string $topic): void
     {
         if (is_string($topic)) {
-            $this->to = [
+            $this->to[$this->groupIndex] = [
                 'target' => Target::TOPIC,
                 'address' => $topic,
             ];
@@ -110,7 +139,7 @@ class FirebaseSender
         }
 
         if ($topic instanceof TopicCondition) {
-            $this->to = [
+            $this->to[$this->groupIndex] = [
                 'target' => Target::CONDITION,
                 'address' => $topic->toCondition(),
             ];
@@ -125,7 +154,7 @@ class FirebaseSender
      */
     public function setNotification(?NotificationPush $notification): void
     {
-        $this->notification = $notification;
+        $this->notification[$this->groupIndex] = $notification;
     }
 
     /**
@@ -135,7 +164,7 @@ class FirebaseSender
      */
     public function setApns(?ApnsPush $apns): void
     {
-        $this->apns = $apns;
+        $this->apns[$this->groupIndex] = $apns;
     }
 
     /**
@@ -145,7 +174,7 @@ class FirebaseSender
      */
     public function setAndroid(?AndroidPush $android): void
     {
-        $this->android = $android;
+        $this->android[$this->groupIndex] = $android;
     }
 
     /**
@@ -155,7 +184,7 @@ class FirebaseSender
      */
     public function setWeb(?WebPush $web): void
     {
-        $this->webpush = $web;
+        $this->webpush[$this->groupIndex] = $web;
     }
 
     /**
@@ -165,7 +194,7 @@ class FirebaseSender
      */
     public function setData(?array $data): void
     {
-        $this->messageData = $data;
+        $this->messageData[$this->groupIndex] = $data;
     }
 
     /**
@@ -173,127 +202,23 @@ class FirebaseSender
      * This allows you to specify a custom array of data that will be sent as the message body in the FCM request.
      *
      * @param array|null $message 
-     */
-    public function setMessage(?array $message)
-    {
-        $this->message = $message;
-    }
-
-    /**
-     * Sets the title of the notification.
-     *
-     * @param string $str
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
-     */
-    public function setTitle(string $str)
-    {
-        ($this->notification ??= new NotificationPush())->setTitle($str);
-    }
-
-    /**
-     * Sets the localization key for the notification title for all platforms.
-     *
-     * @param string $key Localization key.
-     * @param array|null $args Array of arguments (optional).
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
-     */
-    public function setTitleLocKey(string $key, array|null $args = null)
-    {
-        $this->setAndroidTitleLocKey($key, $args);
-        $this->setApnsTitleLocKey($key, $args);
-    }
-
-    /**
-     * Sets the localization key for the Android notification title.
-     *
-     * @param string $key Localization key.
-     * @param array|null $args Array of arguments (optional).
      * 
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
+     * @deprecated Guide to transitioning to V3: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v3.md
      */
-    public function setAndroidTitleLocKey(string $key, array|null $args = null)
+    public function setMessage(?array $message): void
     {
-        ($this->android ??= new AndroidPush())->setTitleLocKey($key);
-        if ($args === null) return;
-        $this->android->setTitleLocArgs(Utils::toStrArg($args));
+        $this->messages = [$message];
     }
 
     /**
-     * Sets the localization key for the APNs notification title.
+     * Set the payload of the custom messages
+     * This allows you to specify a custom array of data that will be sent as the message body in the FCM request.
      *
-     * @param string $key Localization key.
-     * @param array|null $args Array of arguments (optional).
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
+     * @param array|null $messages 
      */
-    public function setApnsTitleLocKey(string $key, array|null $args = null)
+    public function setMessages(?array $messages): void
     {
-        ($this->apns ??= new ApnsPush())->setTitleLocKey($key);
-        if ($args === null) return;
-        $this->apns->setTitleLocArgs(Utils::toStrArg($args));
-    }
-
-    /**
-     * Sets the body of the notification.
-     *
-     * @param string $str
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
-     */
-    public function setBody(string $str)
-    {
-        ($this->notification ??= new NotificationPush())->setBody($str);
-    }
-
-    /**
-     * Sets the localization key for the notification body for all platforms.
-     *
-     * @param string $key Localization key.
-     * @param array|null $args Array of arguments (optional).
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
-     */
-    public function setBodyLocKey(string $key, array|null $args = null)
-    {
-        $this->setAndroidBodyLocKey($key, $args);
-        $this->setApnsBodyLocKey($key, $args);
-    }
-
-    /**
-     *Sets the localization key for the Android notification body.
-     * 
-     * @param string $key Localization key.
-     * @param array|null $args Array of arguments (optional).
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
-     */
-    public function setAndroidBodyLocKey(string $key, array|null $args = null)
-    {
-        ($this->android ??= new AndroidPush())->setBodyLocKey($key);
-        if ($args === null) return;
-        $this->android->setBodyLocArgs(Utils::toStrArg($args));
-    }
-
-    /**
-     *Sets the localization key for the APNs notification body.
-     * 
-     * @param string $key Localization key.
-     * @param array|null $args Array of arguments (optional).
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
-     */
-    public function setApnsBodyLocKey(string $key, array|null $args = null)
-    {
-        ($this->apns ??= new ApnsPush())->setBodyLocKey($key);
-        if ($args === null) return;
-        $this->apns->setBodyLocArgs(Utils::toStrArg($args));
-    }
-
-    /**
-     * Sets a link to an image.
-     *
-     * @param string|null $url
-     * @deprecated Migrating to v2: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md
-     */
-    public function setImage(string|null $url)
-    {
-        ($this->android ??= new AndroidPush())->setImage($url);
-        ($this->apns ??= new ApnsPush())->setImage($url);
+        $this->messages = $messages;
     }
 
     /**
@@ -302,164 +227,242 @@ class FirebaseSender
      * @param bool $enabled Whether to enable logging (default: true).
      * @param string|array|null $payload1 Additional payload data to store with the log (optional).
      * @param string|array|null $payload2 Additional payload data to store with the log (optional).
+     * 
+     * @deprecated Guide to transitioning to V3: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v3.md
      */
     public function setLog(bool $enabled = true, ?string $payload1 = null, ?string $payload2 = null): void
     {
-        $this->dbLog = ['enabled' => $enabled, 'payloads' => [$payload1, $payload2]];
+        $this->logEnabled($enabled);
+        $this->payloads[0]['p1'] = $payload1;
+        $this->payloads[0]['p2'] = $payload2;
     }
 
     /**
-     * Returns the json response data from the last send operation.
+     * Enables log recording.
      *
-     * @return mixed The response data received from Firebase after sending a notification.
+     * @param bool $enabled
      */
-    public function getResponse(): mixed
+    public function logEnabled(bool $enabled = true): void
     {
-        return $this->sendResponse;
+        $this->logEnabled = $enabled;
+    }
+
+    /**
+     * Adds payload to the log
+     *
+     * @param string|null $payload
+     */
+    public function setPayload1(?string $payload = null): void
+    {
+        $this->payloads[$this->groupIndex]['p1'] = $payload;
+    }
+
+    /**
+     * Adds payload to the log
+     *
+     * @param string|null $payload
+     */
+    public function setPayload2(?string $payload = null): void
+    {
+        $this->payloads[$this->groupIndex]['p2'] = $payload;
     }
 
     /**
      * Sends notifications.
      *
-     * @return bool `true` if the push notification was successfully sent, `false` otherwise.
-     * @throws Ex\AccessTokenMissingException
-     * @throws Ex\MessageEmptyException
+     * @return SendReport
+     * 
+     * @throws AccessTokenMissingException Occurs if the authorization token could not be obtained from Google.
+     * @throws MessageEmptyException Occurs when the message is empty.
+     * @throws MissingMessageRecipientException Occurs if the group does not have a message recipient.
+     * @throws MissingMessageContentException Occurs when a message contains only the recipient without any content.
      */
-    public function send(): bool
+    public function send(): SendReport
     {
-        if ($this->authToken === null) $this->authToken = $this->getAuthToken();
-        if ($this->authToken === null) throw new Ex\AccessTokenMissingException();
+        if ($this->authToken === null || $this->authToken->isExpiringSoon()) {
+            $authToken = GoogleService::getAccessToken($this->serviceAccount);
 
-        $message = $this->message != null ? $this->message : $this->makeMessage();
-        if ($message === null || empty($message)) throw new Ex\MessageEmptyException();
+            if ($authToken === null) throw new AccessTokenMissingException();
 
-        $response = Http::withToken($this->authToken['access_token'])
-            ->withHeaders(['Content-Type' => 'application/json; UTF-8',])
-            ->post(
-                "https://fcm.googleapis.com/v1/projects/{$this->serviceAccount['project_id']}/messages:send",
-                ['message' => $message]
-            );
-
-        $this->sendResponse = $response->json();
-
-        if (!$response->successful() || isset($this->sendResponse['error']) || !isset($this->sendResponse['name'])) {
-            $this->writeLog(true, [
-                'failed_at' => Carbon::now(),
-            ]);
-            return false;
+            $this->authToken = $authToken;
         }
 
-        $this->writeLog(true, [
-            'message_id' => $this->getMessageIdFromResponse(),
-            'sent_at' => Carbon::now(),
-        ]);
+        $messages = $this->makeMessages();
+        $responses = GoogleService::poolMessage(
+            $this->serviceAccount['project_id'],
+            $this->authToken->accessToken,
+            $messages
+        );
 
-        return true;
-    }
+        $timezone = config('app.timezone', 'UTC');
 
-    /**
-     * Extracts and returns the message ID from the Firebase response.
-     *
-     * @return string|null The message ID if available, or null if not found in the response.
-     */
-    public function getMessageIdFromResponse(): ?string
-    {
-        if (!isset($this->sendResponse['name'])) return null;
+        /** @var MessageResult[] $messagesResult */
+        $messagesResult = collect($responses)->map(function ($response, $index) use ($messages, $timezone) {
+            $isSuccess = $response->successful();
+            $data = $response->json();
 
-        // [1] - project id, [2] - message id
-        preg_match('/projects\/(.+?)\/messages\/(.*)/', $this->sendResponse['name'], $matches);
+            $serverDate = $response->header('Date');
+            $datetime = $serverDate ? Carbon::parse($serverDate)->setTimezone($timezone) : Carbon::now();
 
-        return $matches[2] ?? null;
+            $recipient = Utils::getRecipient($messages[$index]);
+
+            return new MessageResult(
+                success: $isSuccess,
+                messageId: $isSuccess && isset($data['name']) ? basename($data['name']) : null,
+                target: $recipient['target'],
+                address: $recipient['address'],
+                datetime: $datetime,
+                error: !$isSuccess ? new MessageError(
+                    code: $data['error']['code'] ?? null,
+                    status: $data['error']['status'] ?? null,
+                    message: $data['error']['message'] ?? null,
+                ) : null
+            );
+        })->values()->all();
+
+        if ($this->logEnabled) {
+            $now = Carbon::now();
+            $insertLog = [];
+
+            foreach ($messagesResult as $index => $result) $insertLog[] = [
+                'ulid' => Str::ulid(),
+                'service_account' => $this->serviceAccountName,
+                'message_id' => $result->success ? $result->messageId : null,
+                'target' => $result->target,
+                'to' => $result->address,
+                'payload_1' => $this->payloads[$index]['p1'] ?? null,
+                'payload_2' => $this->payloads[$index]['p2'] ?? null,
+                'exception' => Utils::messageToException($result),
+                'sent_at' => $result->success ? $result->datetime : null,
+                'failed_at' => !$result->success ? $result->datetime : null,
+                'scheduled_at' => null,
+                'created_at' => $now,
+                'updated_at' => $now
+            ];
+
+            if (!empty($insertLog)) {
+                collect($insertLog)->chunk(500)->each(fn($chunk) => FirebaseSenderLog::insert($chunk->toArray()));
+            }
+        }
+
+        return new SendReport(
+            totalCount: count($messagesResult),
+            successCount: collect($messagesResult)->where('success', true)->count(),
+            failureCount: collect($messagesResult)->where('success', false)->count(),
+            messages: $messagesResult
+        );
     }
 
     /**
      * Schedules a notification to be sent at a specific time using a queued job.
      *
-     * @param Carbon|null $scheduledAt The date and time when the notification should be sent. If null, the job will be dispatched immediately.
-     * @throws Ex\MessageEmptyException If the message payload is empty or invalid.
+     * @param Carbon $scheduledAt Date when notification should be sent.
+     * @param int $chunkLength Allows you to split messages into chunks.
+     * @param int $maxRand Adds a random number of seconds to the chunk dispatch schedule.
+     * 
+     * @throws MessageEmptyException Occurs when the message is empty.
+     * @throws MissingMessageRecipientException Occurs if the group does not have a message recipient.
+     * @throws MissingMessageContentException Occurs when a message contains only the recipient without any content.
      */
-    public function sendJob(?Carbon $scheduledAt = null): void
+    public function sendJob(Carbon $scheduledAt, int $chunkLength = 10, int $maxRand = 0): void
     {
-        $message = $this->message != null ? $this->message : $this->makeMessage();
-        if ($message === null || empty($message)) throw new Ex\MessageEmptyException();
+        $messages = $this->makeMessages();
 
-        $model = $this->writeLog(false, [
-            'scheduled_at' => $scheduledAt
-        ]);
+        $insertLog = [];
 
-        FirebaseSenderJob::dispatch(
-            $model != null ? $model->id : null,
-            $this->serviceAccountName,
-            $message,
-        )->delay($scheduledAt);
-    }
+        // Breaking down an array into parts and processing them
+        foreach (array_chunk($messages, $chunkLength, true) as $chunk) {
+            $ulid = [];
 
-    /**
-     * Writes a log entry to the database about the notification sending event.
-     *
-     * @param bool $onlyInsert If true, only inserts a new record and returns the created model; otherwise, performs a standard insert.
-     * @param array|null $data
-     * @return mixed|null Returns the created model if $onlyInsert is true, otherwise null.
-     */
-    protected function writeLog(bool $onlyInsert, ?array $data)
-    {
-        if ($this->dbLog['enabled'] !== true) return null;
+            if ($this->logEnabled) {
+                $now = Carbon::now();
+                foreach ($messages as $index => $message) {
+                    $ulid = Str::ulid();
+                    $ulid[] = $ulid;
+                    $recipient = Utils::getRecipient($message);
+                    $insertLog[] = [
+                        'ulid' => $ulid,
+                        'service_account' => $this->serviceAccountName,
+                        'message_id' => null,
+                        'target' => $recipient['target'],
+                        'to' => $recipient['address'],
+                        'payload_1' => $this->payloads[$index]['p1'] ?? null,
+                        'payload_2' => $this->payloads[$index]['p2'] ?? null,
+                        'sent_at' => null,
+                        'failed_at' => null,
+                        'scheduled_at' => $scheduledAt,
+                        'created_at' => $now,
+                        'updated_at' => $now
+                    ];
+                }
+            }
 
-        $now = Carbon::now();
-
-        $query = [
-            'message_id' => $data['message_id'] ?? null,
-            'service_account' => $this->serviceAccountName,
-            'target' => $this->to['target'],
-            'to' => $this->to['address'],
-            'payload_1' => $this->dbLog['payloads'][0] ?? null,
-            'payload_2' => $this->dbLog['payloads'][1] ?? null,
-            'sent_at' => $data['sent_at'] ?? null,
-            'scheduled_at' => $data['scheduled_at'] ?? null,
-            'failed_at' => $data['failed_at'] ?? null,
-            'created_at' => $now,
-            'updated_at' => $now
-        ];
-
-        if (!$onlyInsert) {
-            return FirebaseSenderLog::select('id')->create($query);
+            FirebaseSenderJob::dispatch(
+                $this->serviceAccountName,
+                $chunk,
+                $ulid,
+            )->delay($maxRand === 0 ? $scheduledAt : $scheduledAt->copy()->addSecond(mt_rand(0, $maxRand)));
         }
 
-        FirebaseSenderLog::insert($query);
-
-        return null;
+        if (!empty($insertLog)) {
+            collect($insertLog)->chunk(500)->each(fn($chunk) => FirebaseSenderLog::insert($chunk->toArray()));
+        }
     }
 
     /**
-     * Creating a message body for a notification.
+     * Creating a messages body for a notification.
      *
      * @return array|null
+     * 
+     * @throws MessageEmptyException Occurs when the message is empty.
+     * @throws MissingMessageRecipientException Occurs if the group does not have a message recipient.
+     * @throws MissingMessageContentException Occurs when a message contains only the recipient without any content.
      */
-    protected function makeMessage(): ?array
+    protected function makeMessages(): array
     {
-        $message = [
-            $this->to['target'] => $this->to['address'],
-            'notification' => $this->notification && ($data = $this->notification->make()) ? $data : null,
-            'android' => $this->android && ($data = $this->android->make()) ? $data : null,
-            'apns' => $this->apns && ($data = $this->apns->make()) ? $data : null,
-            'webpush' => $this->webpush && ($data = $this->webpush->make()) ? $data : null,
-            'data' => $this->messageData,
-        ];
+        if (!empty($this->messages)) {
+            return $this->messages;
+        }
+        $groupCount = $this->getGroupCount();
+        if ($groupCount === 0) {
+            throw new MessageEmptyException();
+        }
 
-        return Utils::nullFilter($message);
-    }
+        $messages = [];
+        for ($i = 0; $i < $groupCount; $i++) {
 
-    /**
-     * Creates an OAuth2 token for authorization.
-     *
-     * @return array<mixed>|null 
-     */
-    public function getAuthToken(): ?array
-    {
-        $credentials = CredentialsLoader::makeCredentials('https://www.googleapis.com/auth/firebase.messaging', $this->serviceAccount);
-        $auth = $credentials->fetchAuthToken();
-        if (!isset($auth['access_token'])) return null;
+            $target = $this->to[$i]['target'] ?? null;
+            $address = $this->to[$i]['address'] ?? null;
 
-        return $auth;
+            if ($target == null || $address == null) {
+                throw new MissingMessageRecipientException($i);
+            }
+
+            $message = [
+                $target => $address,
+                'notification' => ($this->notification[$i] ?? null)?->make(),
+                'android' => ($this->android[$i] ?? null)?->make(),
+                'apns' => ($this->apns[$i] ?? null)?->make(),
+                'webpush' => ($this->webpush[$i] ?? null)?->make(),
+                'data' => $this->messageData[$i] ?? null,
+            ];
+
+            $filtered = Utils::nullFilter($message);
+
+            // Checks whether there is anything else in the message besides the recipient
+            if ($filtered && count($filtered) <= 1) {
+                throw new MissingMessageContentException($i);
+            }
+
+            if ($filtered) {
+                $messages[] = $filtered;
+            }
+        }
+
+        if (empty($messages)) {
+            throw new MessageEmptyException();
+        }
+
+        return $messages;
     }
 }
