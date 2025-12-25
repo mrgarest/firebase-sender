@@ -325,7 +325,7 @@ class FirebaseSender
             $insertLog = [];
 
             foreach ($messagesResult as $index => $result) $insertLog[] = [
-                'ulid' => Str::ulid(),
+                'ulid' => (string) Str::ulid(),
                 'service_account' => $this->serviceAccountName,
                 'message_id' => $result->success ? $result->messageId : null,
                 'target' => $result->target,
@@ -377,7 +377,7 @@ class FirebaseSender
             if ($this->logEnabled) {
                 $now = Carbon::now();
                 foreach ($messages as $index => $message) {
-                    $ulid = Str::ulid();
+                    $ulid = (string) Str::ulid();
                     $ulid[] = $ulid;
                     $recipient = Utils::getRecipient($message);
                     $insertLog[] = [

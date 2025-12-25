@@ -61,7 +61,7 @@ class FirebaseSenderLog extends Model
     {
         static::creating(function ($model) {
             if (empty($model->ulid)) {
-                $model->ulid = Str::ulid();
+                $model->ulid = (string) Str::ulid();
             }
         });
     }
