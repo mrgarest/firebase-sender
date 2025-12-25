@@ -372,13 +372,13 @@ class FirebaseSender
 
         // Breaking down an array into parts and processing them
         foreach (array_chunk($messages, $chunkLength, true) as $chunk) {
-            $ulid = [];
+            $ulids = [];
 
             if ($this->logEnabled) {
                 $now = Carbon::now();
                 foreach ($messages as $index => $message) {
                     $ulid = (string) Str::ulid();
-                    $ulid[] = $ulid;
+                    $ulids[] = $ulid;
                     $recipient = Utils::getRecipient($message);
                     $insertLog[] = [
                         'ulid' => $ulid,
@@ -400,7 +400,7 @@ class FirebaseSender
             FirebaseSenderJob::dispatch(
                 $this->serviceAccountName,
                 $chunk,
-                $ulid,
+                $ulids,
             )->delay($maxRand === 0 ? $scheduledAt : $scheduledAt->copy()->addSecond(mt_rand(0, $maxRand)));
         }
 
