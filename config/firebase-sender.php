@@ -13,7 +13,7 @@ return [
     ],
 
     'job' => [
-        'send_timeout' => 200
+        'send_timeout' => 600 // Allows to set the number of seconds during which a task can send messages before the timeout expires.
     ],
 
     /*
