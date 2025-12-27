@@ -165,6 +165,14 @@ Now, in the configuration file, you can enable or disable caching of the Google 
 
 ```php
 'cache' => [
-    'googleAccessToken' => true
+    'google_access_token' => true
+]
+```
+
+You can now also set the number of seconds during which a task can send messages before the timeout expires.
+
+```php
+'job' => [
+    'send_timeout' => 600
 ]
 ```

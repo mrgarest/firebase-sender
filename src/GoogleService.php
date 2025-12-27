@@ -46,7 +46,7 @@ class GoogleService
      */
     public static function getAccessToken(array $serviceAccount): ?GoogleAccessToken
     {
-        $cashEnabled = (bool) config('firebase-sender.cache.googleAccessToken');
+        $cashEnabled = (bool) config('firebase-sender.cache.google_access_token');
 
         $cacheKey = 'fcm_auth_token_' . md5($serviceAccount['project_id']);
         if (!$cashEnabled) {
