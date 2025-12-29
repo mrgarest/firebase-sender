@@ -24,13 +24,16 @@ class GoogleService
     {
         try {
             return Http::pool(function (Pool $pool) use ($projectId, $accessToken, $messages) {
-                return array_map(function ($message) use ($pool, $projectId, $accessToken) {
-                    return $pool->withToken($accessToken)
-                        ->withHeaders([
-                            'Content-Type' => 'application/json; UTF-8',
-                        ])
-                        ->post('https://fcm.googleapis.com/v1/projects/' . $projectId . '/messages:send', ['message' => $message]);
-                }, $messages);
+                $requests = [];
+                foreach ($messages as $index => $message) {
+                    $requests["msg_{$index}"] = $pool->as("msg_{$index}")
+                        ->withToken($accessToken)
+                        ->withHeaders(['Content-Type' => 'application/json; UTF-8'])
+                        ->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", [
+                            'message' => $message
+                        ]);
+                }
+                return $requests;
             });
         } catch (\Exception $e) {
             return [];

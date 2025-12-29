@@ -4,6 +4,7 @@ namespace MrGarest\FirebaseSender;
 
 use Carbon\Carbon;
 use Illuminate\Support\Str;
+use Illuminate\Http\Client\Response;
 use MrGarest\FirebaseSender\DTO\GoogleAccessToken;
 use MrGarest\FirebaseSender\GoogleService;
 use MrGarest\FirebaseSender\DTO\MessageError;
@@ -29,7 +30,7 @@ class FirebaseSender
     private $serviceAccountName = null;
     private $serviceAccount = null;
     private array $to = [['target' => null, 'address' => null]];
-    private bool $logEnabled = false;
+    private bool $logsEnabled = false;
     private ?array $payloads = null;
     private ?GoogleAccessToken $authToken = null;
     private int $groupIndex = 0;
@@ -244,7 +245,7 @@ class FirebaseSender
      */
     public function logEnabled(bool $enabled = true): void
     {
-        $this->logEnabled = $enabled;
+        $this->logsEnabled = $enabled;
     }
 
     /**
@@ -295,18 +296,24 @@ class FirebaseSender
         );
 
         $timezone = config('app.timezone', 'UTC');
+        $now = Carbon::now();
 
+        $insertLog = [];
         /** @var MessageResult[] $messagesResult */
-        $messagesResult = collect($responses)->map(function ($response, $index) use ($messages, $timezone) {
-            $isSuccess = $response->successful();
-            $data = $response->json();
+        $messagesResult = [];
+        foreach ($messages as $index => $message) {
+            $response = $responses["msg_{$index}"] ?? null;
+            $hasResponse = $response instanceof Response;
 
-            $serverDate = $response->header('Date');
-            $datetime = $serverDate ? Carbon::parse($serverDate)->setTimezone($timezone) : Carbon::now();
+            $isSuccess = $hasResponse && $response->successful();
+            $data = $hasResponse ? $response->json() : [];
 
-            $recipient = Utils::getRecipient($messages[$index]);
+            $serverDate = $hasResponse ? $response->header('Date') : null;
+            $datetime = $serverDate ? Carbon::parse($serverDate)->setTimezone($timezone) : $now;
 
-            return new MessageResult(
+            $recipient = Utils::getRecipient($message);
+
+            $messageResult = new MessageResult(
                 success: $isSuccess,
                 messageId: $isSuccess && isset($data['name']) ? basename($data['name']) : null,
                 target: $recipient['target'],
@@ -318,31 +325,30 @@ class FirebaseSender
                     message: $data['error']['message'] ?? null,
                 ) : null
             );
-        })->values()->all();
 
-        if ($this->logEnabled) {
-            $now = Carbon::now();
-            $insertLog = [];
+            $messagesResult[] = $messageResult;
 
-            foreach ($messagesResult as $index => $result) $insertLog[] = [
+            // Data for insertion into the log/
+            if (!$this->logsEnabled) continue;
+            $insertLog[] = [
                 'ulid' => (string) Str::ulid(),
                 'service_account' => $this->serviceAccountName,
-                'message_id' => $result->success ? $result->messageId : null,
-                'target' => $result->target,
-                'to' => $result->address,
+                'message_id' => $messageResult->messageId,
+                'target' => $messageResult->target,
+                'to' => $messageResult->address,
                 'payload_1' => $this->payloads[$index]['p1'] ?? null,
                 'payload_2' => $this->payloads[$index]['p2'] ?? null,
-                'exception' => Utils::messageToException($result),
-                'sent_at' => $result->success ? $result->datetime : null,
-                'failed_at' => !$result->success ? $result->datetime : null,
+                'exception' => Utils::messageToException($messageResult),
+                'sent_at' => $isSuccess ? $datetime : null,
+                'failed_at' => !$isSuccess ? $datetime : null,
                 'scheduled_at' => null,
                 'created_at' => $now,
                 'updated_at' => $now
             ];
+        }
 
-            if (!empty($insertLog)) {
-                collect($insertLog)->chunk(500)->each(fn($chunk) => FirebaseSenderLog::insert($chunk->toArray()));
-            }
+        if ($this->logsEnabled && !empty($insertLog)) {
+            collect($insertLog)->chunk(500)->each(fn($chunk) => FirebaseSenderLog::insert($chunk->toArray()));
         }
 
         return new SendReport(
@@ -374,7 +380,7 @@ class FirebaseSender
         foreach (array_chunk($messages, $chunkLength, true) as $chunk) {
             $ulids = [];
 
-            if ($this->logEnabled) {
+            if ($this->logsEnabled) {
                 $now = Carbon::now();
                 foreach ($messages as $index => $message) {
                     $ulid = (string) Str::ulid();
@@ -398,6 +404,7 @@ class FirebaseSender
             }
 
             FirebaseSenderJob::dispatch(
+                $this->logsEnabled,
                 $this->serviceAccountName,
                 $chunk,
                 $ulids,

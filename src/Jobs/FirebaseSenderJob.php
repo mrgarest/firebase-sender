@@ -23,6 +23,7 @@ class FirebaseSenderJob implements ShouldQueue
      * Create a new job instance.
      */
     public function __construct(
+        public bool $logsEnabled,
         public string $serviceAccount,
         public array $messages,
         public array|null $ulids,
@@ -40,7 +41,9 @@ class FirebaseSenderJob implements ShouldQueue
         $firebaseSender->setMessages($this->messages);
         $results = $firebaseSender->send();
 
-        if (empty($this->ulids)) return;
+        if (!$this->logsEnabled || empty($this->ulids)) {
+            return;
+        }
 
         $updateData = [];
         foreach ($results->messages as $index => $message) {
