@@ -21,6 +21,8 @@ Most of the methods listed above were obsolete in version v2, so they were remov
 - `getMessageIdFromResponse`
 - `getResponse`
 - `getAuthToken`
+- `setMessage`
+- `setLog`
 
 ## Deprecated methods
 

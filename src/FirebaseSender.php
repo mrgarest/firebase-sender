@@ -199,19 +199,6 @@ class FirebaseSender
     }
 
     /**
-     * Set the payload of the custom message
-     * This allows you to specify a custom array of data that will be sent as the message body in the FCM request.
-     *
-     * @param array|null $message 
-     * 
-     * @deprecated Guide to transitioning to V3: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v3.md
-     */
-    public function setMessage(?array $message): void
-    {
-        $this->messages = [$message];
-    }
-
-    /**
      * Set the payload of the custom messages
      * This allows you to specify a custom array of data that will be sent as the message body in the FCM request.
      *
@@ -220,22 +207,6 @@ class FirebaseSender
     public function setMessages(?array $messages): void
     {
         $this->messages = $messages;
-    }
-
-    /**
-     * Enables or disables logging of the notification sending event to the database.
-     *
-     * @param bool $enabled Whether to enable logging (default: true).
-     * @param string|array|null $payload1 Additional payload data to store with the log (optional).
-     * @param string|array|null $payload2 Additional payload data to store with the log (optional).
-     * 
-     * @deprecated Guide to transitioning to V3: https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v3.md
-     */
-    public function setLog(bool $enabled = true, ?string $payload1 = null, ?string $payload2 = null): void
-    {
-        $this->logEnabled($enabled);
-        $this->payloads[0]['p1'] = $payload1;
-        $this->payloads[0]['p2'] = $payload2;
     }
 
     /**
