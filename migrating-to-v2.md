@@ -56,19 +56,19 @@ new ApnsPush(
 
 The methods `setTitle()`, `setTitleLocKey()`, `setBody()`, `setBodyLocKey()` have been replaced with the new `setNotification()` method.
 
-You can learn how to use the `setNotification()` method in the [README.md](https://github.com/mrgarest/laravel-firebase-sender/blob/master/README.md#set-notifications) file.
+You can learn how to use the `setNotification()` method in the [README.md](https://github.com/mrgarest/firebase-sender/blob/master/README.md#set-notifications) file.
 
 ### Android
 
 The `setAndroidTitleLocKey()` and `setAndroidBodyLocKey()` methods have been replaced with the new `setAndroid()` method.
 
-You can learn how to use the `setAndroid()` method in the [README.md](https://github.com/mrgarest/laravel-firebase-sender/blob/master/README.md#set-notifications-for-android) file.
+You can learn how to use the `setAndroid()` method in the [README.md](https://github.com/mrgarest/firebase-sender/blob/master/README.md#set-notifications-for-android) file.
 
 ### APNs
 
 The `setApnsTitleLocKey()` and `setApnsBodyLocKey()` methods have been replaced with the new `setApns()` method.
 
-You can learn how to use the `setApns()` method in the [README.md](https://github.com/mrgarest/laravel-firebase-sender/blob/master/README.md#set-notifications-for-apns) file.
+You can learn how to use the `setApns()` method in the [README.md](https://github.com/mrgarest/firebase-sender/blob/master/README.md#set-notifications-for-apns) file.
 
 
 ## Database logs

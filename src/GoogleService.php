@@ -1,13 +1,13 @@
 <?php
 
-namespace MrGarest\FirebaseSender;
+namespace Garest\FirebaseSender;
 
 use Carbon\Carbon;
 use Google\Auth\Credentials\ServiceAccountCredentials;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use MrGarest\FirebaseSender\DTO\GoogleAccessToken;
+use Garest\FirebaseSender\DTO\GoogleAccessToken;
 
 class GoogleService
 {

@@ -1,6 +1,6 @@
 <?php
 
-namespace MrGarest\FirebaseSender\DTO;
+namespace Garest\FirebaseSender\DTO;
 
 class SendReport
 {

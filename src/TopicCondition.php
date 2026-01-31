@@ -1,9 +1,9 @@
 <?php
 
-namespace MrGarest\FirebaseSender;
+namespace Garest\FirebaseSender;
 
-use MrGarest\FirebaseSender\Target;
-use MrGarest\FirebaseSender\Exceptions as Ex;
+use Garest\FirebaseSender\Target;
+use Garest\FirebaseSender\Exceptions as Ex;
 
 class TopicCondition
 {

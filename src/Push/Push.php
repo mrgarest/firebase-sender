@@ -1,6 +1,6 @@
 <?php
 
-namespace MrGarest\FirebaseSender\Push;
+namespace Garest\FirebaseSender\Push;
 
 class Push
 {

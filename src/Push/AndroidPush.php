@@ -1,8 +1,8 @@
 <?php
 
-namespace MrGarest\FirebaseSender\Push;
+namespace Garest\FirebaseSender\Push;
 
-use MrGarest\FirebaseSender\Utils;
+use Garest\FirebaseSender\Utils;
 
 /**
  * Represents data structure for Android push notifications.

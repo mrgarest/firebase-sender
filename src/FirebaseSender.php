@@ -1,29 +1,29 @@
 <?php
 
-namespace MrGarest\FirebaseSender;
+namespace Garest\FirebaseSender;
 
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Http\Client\Response;
-use MrGarest\FirebaseSender\DTO\GoogleAccessToken;
-use MrGarest\FirebaseSender\GoogleService;
-use MrGarest\FirebaseSender\DTO\MessageError;
-use MrGarest\FirebaseSender\DTO\MessageResult;
-use MrGarest\FirebaseSender\DTO\SendReport;
-use MrGarest\FirebaseSender\Exceptions\AccessTokenMissingException;
-use MrGarest\FirebaseSender\Exceptions\MessageEmptyException;
-use MrGarest\FirebaseSender\Exceptions\MissingMessageContentException;
-use MrGarest\FirebaseSender\Target;
-use MrGarest\FirebaseSender\Exceptions\MissingMessageRecipientException;
-use MrGarest\FirebaseSender\Exceptions\ServiceAccountException;
-use MrGarest\FirebaseSender\Utils;
-use MrGarest\FirebaseSender\TopicCondition;
-use MrGarest\FirebaseSender\Jobs\FirebaseSenderJob;
-use MrGarest\FirebaseSender\Models\FirebaseSenderLog;
-use MrGarest\FirebaseSender\Push\AndroidPush;
-use MrGarest\FirebaseSender\Push\ApnsPush;
-use MrGarest\FirebaseSender\Push\NotificationPush;
-use MrGarest\FirebaseSender\Push\WebPush;
+use Garest\FirebaseSender\DTO\GoogleAccessToken;
+use Garest\FirebaseSender\GoogleService;
+use Garest\FirebaseSender\DTO\MessageError;
+use Garest\FirebaseSender\DTO\MessageResult;
+use Garest\FirebaseSender\DTO\SendReport;
+use Garest\FirebaseSender\Exceptions\AccessTokenMissingException;
+use Garest\FirebaseSender\Exceptions\MessageEmptyException;
+use Garest\FirebaseSender\Exceptions\MissingMessageContentException;
+use Garest\FirebaseSender\Target;
+use Garest\FirebaseSender\Exceptions\MissingMessageRecipientException;
+use Garest\FirebaseSender\Exceptions\ServiceAccountException;
+use Garest\FirebaseSender\Utils;
+use Garest\FirebaseSender\TopicCondition;
+use Garest\FirebaseSender\Jobs\FirebaseSenderJob;
+use Garest\FirebaseSender\Models\FirebaseSenderLog;
+use Garest\FirebaseSender\Push\AndroidPush;
+use Garest\FirebaseSender\Push\ApnsPush;
+use Garest\FirebaseSender\Push\NotificationPush;
+use Garest\FirebaseSender\Push\WebPush;
 
 class FirebaseSender
 {

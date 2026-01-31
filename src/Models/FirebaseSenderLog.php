@@ -1,12 +1,12 @@
 <?php
 
-namespace MrGarest\FirebaseSender\Models;
+namespace Garest\FirebaseSender\Models;
 
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use MrGarest\FirebaseSender\Target;
-use MrGarest\FirebaseSender\TopicCondition;
+use Garest\FirebaseSender\Target;
+use Garest\FirebaseSender\TopicCondition;
 use Illuminate\Support\Str;
 
 /**

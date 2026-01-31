@@ -1,12 +1,12 @@
 <?php
 
-namespace MrGarest\FirebaseSender\Jobs;
+namespace Garest\FirebaseSender\Jobs;
 
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use MrGarest\FirebaseSender\FirebaseSender;
-use MrGarest\FirebaseSender\Models\FirebaseSenderLog;
-use MrGarest\FirebaseSender\Utils;
+use Garest\FirebaseSender\FirebaseSender;
+use Garest\FirebaseSender\Models\FirebaseSenderLog;
+use Garest\FirebaseSender\Utils;
 
 class FirebaseSenderJob implements ShouldQueue
 {

@@ -1,8 +1,8 @@
 <?php
 
-namespace MrGarest\FirebaseSender;
+namespace Garest\FirebaseSender;
 
-use MrGarest\FirebaseSender\DTO\MessageResult;
+use Garest\FirebaseSender\DTO\MessageResult;
 
 class Utils
 {

@@ -2,7 +2,7 @@
 
 Laravel library for sending notifications with Firebase Cloud Messaging (FCM).
 
-_If you have previously used the old version of v2, you should read the instructions for [migrating to v3](https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v3.md)._
+_If you have previously used the old version of v2, you should read the instructions for [migrating to v3](https://github.com/mrgarest/firebase-sender/blob/master/migrating-to-v3.md)._
 
 ### Supported platforms
 
@@ -17,7 +17,7 @@ _If you have previously used the old version of v2, you should read the instruct
 You can install the package via composer:
 
 ```
-composer require mrgarest/laravel-firebase-sender
+composer require garest/firebase-sender
 ```
 
 ## Configuration

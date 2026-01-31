@@ -1,6 +1,6 @@
 # Migrating to v3
 
-If you are upgrading from version v1 to version v3, you may find the [migration guide from version v1 to version v2](https://github.com/mrgarest/laravel-firebase-sender/blob/master/migrating-to-v2.md) useful.
+If you are upgrading from version v1 to version v3, you may find the [migration guide from version v1 to version v2](https://github.com/mrgarest/firebase-sender/blob/master/migrating-to-v2.md) useful.
 
 ## Removed methods
 

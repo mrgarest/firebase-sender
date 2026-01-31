@@ -1,10 +1,10 @@
 {
-    "name": "mrgarest/laravel-firebase-sender",
+    "name": "garest/firebase-sender",
     "description": "Laravel library for sending notifications with Firebase Cloud Messaging (FCM)",
     "type": "library",
     "license": "MIT",
     "version": "3.1.2",
-    "homepage": "https://github.com/mrgarest/laravel-firebase-sender",
+    "homepage": "https://github.com/mrgarest/firebase-sender",
     "keywords": [
         "Garest",
         "MrGarest",
@@ -30,13 +30,13 @@
     },
     "autoload": {
         "psr-4": {
-            "MrGarest\\FirebaseSender\\": "src/"
+            "Garest\\FirebaseSender\\": "src/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "MrGarest\\FirebaseSender\\FirebaseSenderServiceProvider"
+                "Garest\\FirebaseSender\\FirebaseSenderServiceProvider"
             ]
         }
     },

@@ -1,6 +1,6 @@
 <?php
 
-namespace MrGarest\FirebaseSender\Exceptions;
+namespace Garest\FirebaseSender\Exceptions;
 
 final class ServiceAccountException extends \Exception
 {

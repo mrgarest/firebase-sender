@@ -1,6 +1,6 @@
 <?php
 
-namespace MrGarest\FirebaseSender;
+namespace Garest\FirebaseSender;
 
 use Illuminate\Support\ServiceProvider;
 

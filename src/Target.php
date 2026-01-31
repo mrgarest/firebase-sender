@@ -1,6 +1,6 @@
 <?php
 
-namespace MrGarest\FirebaseSender;
+namespace Garest\FirebaseSender;
 
 class Target
 {
