@@ -8,7 +8,7 @@ _If you have previously used the old version of v2, you should read the instruct
 
 ### Supported platforms
 
-| ✅  | Platform  |
+| ✅  | Platform |
 | --- | -------- |
 | ✅  | Apns     |
 | ✅  | Android  |
@@ -152,6 +152,7 @@ $firebaseSender->setGroup(int $index): void
 Each group must have its own index, recipient, and message body.
 
 Example of sending group notifications:
+
 ```php
 $firebaseSender = new FirebaseSender('MY_SERVICE_ACCOUNT_NAME');
 
@@ -190,7 +191,6 @@ $firebaseSender->setMessages([
 
 _When using `setMessages`, the `setNotification`, `setAndroid` and `setApns` methods will not work._
 
-
 ## Localized notifications
 
 `AndroidPush` and `ApnsPush` support sending localized notifications, which allows you to dynamically display text depending on the user's language.
@@ -218,7 +218,6 @@ $firebaseSender->logEnabled(bool $enabled = true): void
 ```
 
 The event log also supports two additional methods for adding payloads to the log.
-
 
 ```php
 $firebaseSender->setPayload1(?string $payload = null): void
@@ -324,4 +323,16 @@ $query->failedBetween(
     Carbon::now(),
     Carbon::now()->subHours(1)
 );
+```
+
+## Google Access Token
+
+If you only need an access token from Google to send messages from other platforms or for any other purpose, you can use the following example:
+
+```php
+use Garest\FirebaseSender\Facades\GoogleApi;
+use Garest\FirebaseSender\Facades\ServiceAccount;
+
+$account = ServiceAccount::getByName('MY_SERVICE_ACCOUNT_NAME');
+$token = GoogleApi::getAccessToken($account);
 ```

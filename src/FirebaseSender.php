@@ -6,16 +6,17 @@ use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Http\Client\Response;
 use Garest\FirebaseSender\DTO\GoogleAccessToken;
-use Garest\FirebaseSender\GoogleService;
 use Garest\FirebaseSender\DTO\MessageError;
 use Garest\FirebaseSender\DTO\MessageResult;
 use Garest\FirebaseSender\DTO\SendReport;
+use Garest\FirebaseSender\DTO\ServiceAccountData;
 use Garest\FirebaseSender\Exceptions\AccessTokenMissingException;
 use Garest\FirebaseSender\Exceptions\MessageEmptyException;
 use Garest\FirebaseSender\Exceptions\MissingMessageContentException;
 use Garest\FirebaseSender\Target;
 use Garest\FirebaseSender\Exceptions\MissingMessageRecipientException;
-use Garest\FirebaseSender\Exceptions\ServiceAccountException;
+use Garest\FirebaseSender\Facades\GoogleApi;
+use Garest\FirebaseSender\Facades\ServiceAccount;
 use Garest\FirebaseSender\Utils;
 use Garest\FirebaseSender\TopicCondition;
 use Garest\FirebaseSender\Jobs\FirebaseSenderJob;
@@ -28,7 +29,7 @@ use Garest\FirebaseSender\Push\WebPush;
 class FirebaseSender
 {
     private $serviceAccountName = null;
-    private $serviceAccount = null;
+    private ServiceAccountData $serviceAccount;
     private array $to = [['target' => null, 'address' => null]];
     private bool $logsEnabled = false;
     private ?array $payloads = null;
@@ -61,8 +62,7 @@ class FirebaseSender
     public function __construct(string $serviceAccountName)
     {
         $this->serviceAccountName = $serviceAccountName;
-        $this->serviceAccount = config('firebase-sender.service_accounts.' . $serviceAccountName);
-        if ($this->serviceAccount === null) throw new ServiceAccountException();
+        $this->serviceAccount = ServiceAccount::getByName($serviceAccountName);
     }
 
     /**
@@ -252,7 +252,7 @@ class FirebaseSender
     public function send(): SendReport
     {
         if ($this->authToken === null || $this->authToken->isExpiringSoon()) {
-            $authToken = GoogleService::getAccessToken($this->serviceAccount);
+            $authToken = GoogleApi::getAccessToken($this->serviceAccount);
 
             if ($authToken === null) throw new AccessTokenMissingException();
 
@@ -260,8 +260,8 @@ class FirebaseSender
         }
 
         $messages = $this->makeMessages();
-        $responses = GoogleService::poolMessage(
-            $this->serviceAccount['project_id'],
+        $responses = GoogleApi::poolMessage(
+            $this->serviceAccount->projectId,
             $this->authToken->accessToken,
             $messages
         );
