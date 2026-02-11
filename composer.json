@@ -3,7 +3,7 @@
     "description": "Laravel library for sending notifications with Firebase Cloud Messaging (FCM)",
     "type": "library",
     "license": "MIT",
-    "version": "3.2.0",
+    "version": "3.3.0",
     "homepage": "https://github.com/mrgarest/firebase-sender",
     "keywords": [
         "Garest",

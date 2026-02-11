@@ -2,6 +2,8 @@
 
 namespace Garest\FirebaseSender\Jobs;
 
+use Garest\FirebaseSender\Events\FirebaseMessageFailed;
+use Garest\FirebaseSender\Events\FirebaseNotFound;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Garest\FirebaseSender\FirebaseSender;
@@ -41,14 +43,26 @@ class FirebaseSenderJob implements ShouldQueue
         $firebaseSender->setMessages($this->messages);
         $results = $firebaseSender->send();
 
-        if (!$this->logsEnabled || empty($this->ulids)) {
-            return;
-        }
-
         $updateData = [];
         foreach ($results->messages as $index => $message) {
             $ulid = $this->ulids[$index] ?? null;
-            if (!$ulid) continue;
+
+            // If the message failed, fire the FirebaseMessageFailed event with the error details
+            if (!$message->success) {
+                event(new FirebaseMessageFailed(
+                    serviceAccount: $this->serviceAccount,
+                    address: $message->address,
+                    target: $message->target,
+                    code: $message->error->code,
+                    status: $message->error->status,
+                    message: $message->error->message
+                ));
+            }
+
+            // If the log is disabled or ulid is not found, skip the log.
+            if (!$this->logsEnabled || !$ulid) {
+                continue;
+            }
 
             $updateData[] = [
                 'ulid' => $ulid,

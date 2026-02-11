@@ -10,6 +10,7 @@ use Garest\FirebaseSender\DTO\MessageError;
 use Garest\FirebaseSender\DTO\MessageResult;
 use Garest\FirebaseSender\DTO\SendReport;
 use Garest\FirebaseSender\DTO\ServiceAccountData;
+use Garest\FirebaseSender\Events\FirebaseMessageFailed;
 use Garest\FirebaseSender\Exceptions\AccessTokenMissingException;
 use Garest\FirebaseSender\Exceptions\MessageEmptyException;
 use Garest\FirebaseSender\Exceptions\MissingMessageContentException;
@@ -299,23 +300,36 @@ class FirebaseSender
 
             $messagesResult[] = $messageResult;
 
-            // Data for insertion into the log/
-            if (!$this->logsEnabled) continue;
-            $insertLog[] = [
-                'ulid' => (string) Str::ulid(),
-                'service_account' => $this->serviceAccountName,
-                'message_id' => $messageResult->messageId,
-                'target' => $messageResult->target,
-                'to' => $messageResult->address,
-                'payload_1' => $this->payloads[$index]['p1'] ?? null,
-                'payload_2' => $this->payloads[$index]['p2'] ?? null,
-                'exception' => Utils::messageToException($messageResult),
-                'sent_at' => $isSuccess ? $datetime : null,
-                'failed_at' => !$isSuccess ? $datetime : null,
-                'scheduled_at' => null,
-                'created_at' => $now,
-                'updated_at' => $now
-            ];
+            // Data for insertion into the log.
+            if (!$this->logsEnabled) {
+                $insertLog[] = [
+                    'ulid' => (string) Str::ulid(),
+                    'service_account' => $this->serviceAccountName,
+                    'message_id' => $messageResult->messageId,
+                    'target' => $messageResult->target,
+                    'to' => $messageResult->address,
+                    'payload_1' => $this->payloads[$index]['p1'] ?? null,
+                    'payload_2' => $this->payloads[$index]['p2'] ?? null,
+                    'exception' => Utils::messageToException($messageResult),
+                    'sent_at' => $isSuccess ? $datetime : null,
+                    'failed_at' => !$isSuccess ? $datetime : null,
+                    'scheduled_at' => null,
+                    'created_at' => $now,
+                    'updated_at' => $now
+                ];
+            }
+
+            // If the message failed, fire the FirebaseMessageFailed event with the error details
+            if (!$isSuccess) {
+                event(new FirebaseMessageFailed(
+                    serviceAccount: $this->serviceAccountName,
+                    address: $messageResult->address,
+                    target: $messageResult->target,
+                    code: $messageResult->error->code,
+                    status: $messageResult->error->status,
+                    message: $messageResult->error->message
+                ));
+            }
         }
 
         if ($this->logsEnabled && !empty($insertLog)) {

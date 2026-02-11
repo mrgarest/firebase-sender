@@ -336,3 +336,8 @@ use Garest\FirebaseSender\Facades\ServiceAccount;
 $account = ServiceAccount::getByName('MY_SERVICE_ACCOUNT_NAME');
 $token = GoogleApi::getAccessToken($account);
 ```
+
+## Events
+
+When Firebase returns an error during sending (for example, invalid token or quota exhausted), the package generates a `Garest\FirebaseSender\Events\FirebaseMessageFailed` event. You can subscribe to this event to perform some actions.
+
