@@ -344,46 +344,50 @@ class FirebaseSender
     public function sendJob(Carbon $scheduledAt, int $chunkLength = 10, int $maxRand = 0): void
     {
         $messages = $this->makeMessages();
-
+        $allUlids = [];
         $insertLog = [];
+        $now = Carbon::now();
 
-        // Breaking down an array into parts and processing them
-        foreach (array_chunk($messages, $chunkLength, true) as $chunk) {
-            $ulids = [];
+        // Generating ULIDs for all messages and preparing log data if logging is enabled
+        foreach ($messages as $index => $message) {
+            $ulid = (string) Str::ulid();
+            $allUlids[$index] = $ulid;
 
             if ($this->logsEnabled) {
-                $now = Carbon::now();
-                foreach ($messages as $index => $message) {
-                    $ulid = (string) Str::ulid();
-                    $ulids[] = $ulid;
-                    $recipient = Utils::getRecipient($message);
-                    $insertLog[] = [
-                        'ulid' => $ulid,
-                        'service_account' => $this->serviceAccountName,
-                        'message_id' => null,
-                        'target' => $recipient['target'],
-                        'to' => $recipient['address'],
-                        'payload_1' => $this->payloads[$index]['p1'] ?? null,
-                        'payload_2' => $this->payloads[$index]['p2'] ?? null,
-                        'sent_at' => null,
-                        'failed_at' => null,
-                        'scheduled_at' => $scheduledAt,
-                        'created_at' => $now,
-                        'updated_at' => $now
-                    ];
-                }
+                $recipient = Utils::getRecipient($message);
+                $insertLog[] = [
+                    'ulid' => $ulid,
+                    'service_account' => $this->serviceAccountName,
+                    'message_id' => null,
+                    'target' => $recipient['target'],
+                    'to' => $recipient['address'],
+                    'payload_1' => $this->payloads[$index]['p1'] ?? null,
+                    'payload_2' => $this->payloads[$index]['p2'] ?? null,
+                    'sent_at' => null,
+                    'failed_at' => null,
+                    'scheduled_at' => $scheduledAt,
+                    'created_at' => $now,
+                    'updated_at' => $now
+                ];
             }
+        }
 
+        // Inserting a logo into a database
+        if (!empty($insertLog)) {
+            collect($insertLog)->chunk(500)->each(fn($chunk) => FirebaseSenderLog::insert($chunk->toArray()));
+        }
+
+        // Сreating chunks of messages and corresponding ULIDs for dispatching jobs
+        $messageChunks = array_chunk($messages, $chunkLength);
+        $ulidChunks = array_chunk($allUlids, $chunkLength);
+
+        foreach ($messageChunks as $i => $chunk) {
             FirebaseSenderJob::dispatch(
                 $this->logsEnabled,
                 $this->serviceAccountName,
                 $chunk,
-                $ulids,
+                $ulidChunks[$i]
             )->delay($maxRand === 0 ? $scheduledAt : $scheduledAt->copy()->addSecond(mt_rand(0, $maxRand)));
-        }
-
-        if (!empty($insertLog)) {
-            collect($insertLog)->chunk(500)->each(fn($chunk) => FirebaseSenderLog::insert($chunk->toArray()));
         }
     }
 
