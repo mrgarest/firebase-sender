@@ -3,6 +3,7 @@
 namespace Garest\FirebaseSender\Models;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Garest\FirebaseSender\Target;
@@ -22,9 +23,15 @@ use Illuminate\Support\Str;
  * @method static Builder|static sentBetween(Carbon $start, Carbon $end) Filter records sent between two dates.
  * @method static Builder|static scheduledBetween(Carbon $start, Carbon $end) Filter records scheduled between two dates.
  * @method static Builder|static failedBetween(Carbon $start, Carbon $end) Filter records failed between two dates.
+ * @method static Builder<static>|FirebaseSenderLog newModelQuery()
+ * @method static Builder<static>|FirebaseSenderLog newQuery()
+ * @method static Builder<static>|FirebaseSenderLog query()
+ * @mixin \Eloquent
  */
 class FirebaseSenderLog extends Model
 {
+    use Prunable;
+
     protected $fillable = [
         'ulid',
         'service_account',
@@ -64,6 +71,21 @@ class FirebaseSenderLog extends Model
                 $model->ulid = (string) Str::ulid();
             }
         });
+    }
+
+    /**
+     * Define the pruning logic for old log entries.
+     */
+    public function prunable(): Builder
+    {
+        $hours = config('firebase-sender.log.prune_after');
+
+        // If prune_after is not set, return an empty query to prevent pruning any records.
+        if (is_null($hours)) {
+            return static::whereRaw('1 = 0');
+        }
+
+        return static::where('created_at', '<=', Carbon::now()->subHours($hours));
     }
 
     /**

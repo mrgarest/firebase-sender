@@ -16,12 +16,16 @@ return [
         'send_timeout' => 600 // Allows to set the number of seconds during which a task can send messages before the timeout expires.
     ],
 
+    // The number of hours after which log entries will be deleted. Set to null to disable deletion.
+    'log' => [
+        'prune_after' => null,
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Firebase Service Account
     |--------------------------------------------------------------------------
     */
-
     'service_accounts' => [
         '###WRITE_YOUR_OWN_NAME_HERE###' => [
             'project_id' => "###REPLACE_WITH_YOUR_PROJECT_ID###",

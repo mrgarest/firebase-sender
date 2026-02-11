@@ -178,3 +178,12 @@ You can now also set the number of seconds during which a task can send messages
     'send_timeout' => 600
 ]
 ```
+
+Now you can automatically delete old log entries using this configuration:
+
+```php
+// The number of hours after which log entries will be deleted. Set to null to disable deletion.
+'log' => [
+    'prune_after' => null,
+]
+```
