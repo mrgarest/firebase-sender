@@ -32,7 +32,7 @@ php artisan vendor:publish --tag=firebase-sender-config
 
 After publishing the configuration file, you need to open it and add the Service account data from the Firebase console.
 
-_If you don't know how to get a Service account, here is a [video from YouTube](https://www.youtube.com/watch?v=aeBiLIw2KnY)._
+![Service account](https://i.ibb.co/23hQfS84/sa.jpg)
 
 ## Usage
 
